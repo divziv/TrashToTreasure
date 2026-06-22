@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* ---------------- ACCESSIBILITY WCAG 2.1 HUE SHIFTS ---------------- */
+
+.protanopia-filter {
+  filter: hue-rotate(10deg) saturate(1.2) contrast(1.15) !important;
+}
+
+.deuteranopia-filter {
+  filter: hue-rotate(30deg) saturate(1.2) contrast(1.15) !important;
+}
+
+.tritanopia-filter {
+  filter: hue-rotate(170deg) contrast(1.2) !important;
+}
+
+.monochromacy-filter {
+  filter: grayscale(100%) contrast(1.4) !important;
+}
+
+/* ---- ACCESSIBLE ENHANCED TYPOGRAPHY ---- */
+
+.text-large p, 
+.text-large span, 
+.text-large button, 
+.text-large div,
+.text-large select,
+.text-large select option {
+  font-size: 1.05em !important;
+  line-height: 1.625 !important;
+}
+
+.text-xlarge p, 
+.text-xlarge span, 
+.text-xlarge button, 
+.text-xlarge div,
+.text-xlarge select,
+.text-xlarge select option {
+  font-size: 1.18em !important;
+  line-height: 1.7 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Pulsing scanner overlay */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.95; }
+}
+
+.pulse-animation {
+  animation: pulseGlow 1.8s infinite ease-in-out;
+}
+
+body {
+  background-color: #FAF8F2;
+  color: #1A1A1A;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* ---- NEOBRUTALIST VIBRANT STYLING ---- */
+.vibrant-bg-cream {
+  background-color: #FAF8F2 !important;
+}
+.vibrant-bg-yellow {
+  background-color: #FFD700 !important;
+}
+.vibrant-bg-purple {
+  background-color: #7C3AED !important;
+}
+.vibrant-bg-rose {
+  background-color: #F43F5E !important;
+}
+.vibrant-bg-gold {
+  background-color: #FBBF24 !important;
+}
+.vibrant-border {
+  border: 4px solid #000000 !important;
+}
+.vibrant-border-2 {
+  border: 2px solid #000000 !important;
+}
+.vibrant-shadow {
+  box-shadow: 8px 8px 0px 0px #000000 !important;
+}
+.vibrant-shadow-md {
+  box-shadow: 6px 6px 0px 0px #000000 !important;
+}
+.vibrant-shadow-sm {
+  box-shadow: 4px 4px 0px 0px #000000 !important;
+}
+
+
