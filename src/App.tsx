@@ -24,6 +24,8 @@ import SupervisorPanel from './components/SupervisorPanel';
 import CollectorPanel from './components/CollectorPanel';
 import ResidentPanel from './components/ResidentPanel';
 import DonationHub from './components/DonationHub';
+import { IndiaMap } from './components/IndiaMap';
+import { Globe, LogIn, LogOut, CheckCircle, AlertTriangle, Bell, Megaphone } from 'lucide-react';
 
 // Types
 import { 
@@ -42,7 +44,72 @@ export default function App() {
   const [voiceActive, setVoiceActive] = useState<boolean>(false);
 
   // Active view states
-  const [activeTab, setActiveTab] = useState<'metrics' | 'resident' | 'supervisor' | 'collector' | 'donations'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'resident' | 'supervisor' | 'collector' | 'donations' | 'national'>('metrics');
+
+  // Google Auth Session states
+  const [googleUser, setGoogleUser] = useState<{
+    name: string;
+    email: string;
+    avatar?: string;
+    role?: string;
+    portalId?: string;
+    unitNumber?: string;
+    focusCategory?: string;
+  } | null>(null);
+
+  const [showGoogleModal, setShowGoogleModal] = useState<boolean>(false);
+  const [isNewGoogleUser, setIsNewGoogleUser] = useState<boolean>(false);
+  
+  // Forms states for Google signup
+  const [googleFormEmail, setGoogleFormEmail] = useState<string>('');
+  const [googleFormName, setGoogleFormName] = useState<string>('');
+  const [googleFormRole, setGoogleFormRole] = useState<'resident' | 'collector' | 'supervisor' | 'donor'>('resident');
+  const [googleFormPortalId, setGoogleFormPortalId] = useState<string>('');
+  const [googleFormUnit, setGoogleFormUnit] = useState<string>('');
+  const [googleFormFocus, setGoogleFormFocus] = useState<string>('Electronics');
+
+  // Live Community Broadcast Updates feed
+  const [googleUpdates, setGoogleUpdates] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    title: string;
+    text: string;
+    category: string;
+    createdAt: string;
+  }>>([
+    {
+      id: 'g-up-1',
+      name: 'Arun Kumar',
+      email: 'arun.k@gmail.com',
+      title: 'Block A Cardboard Reclamation Completed',
+      text: 'Collected and consolidated 15kg of dry cardboard boxes from the third floor. Stored securely at local collection bay.',
+      category: 'Paper & Cardboard',
+      createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+    },
+    {
+      id: 'g-up-2',
+      name: 'Sneha Patel',
+      email: 'sneha.patel@gmail.com',
+      title: 'Bio-composting temperature audit',
+      text: 'The wet compost pits in Sector B have reached optimal fermentation temperature. Decomposition looking clean and odor-free.',
+      category: 'Organic Composting',
+      createdAt: new Date(Date.now() - 3600000 * 18).toISOString()
+    }
+  ]);
+
+  // Google Action: Create Dispatch Alert Form
+  const [showDispatchSuccess, setShowDispatchSuccess] = useState<boolean>(false);
+  const [dispatchTarget, setDispatchTarget] = useState<'committee' | 'rews' | 'janitor'>('rews');
+  const [dispatchDesc, setDispatchDesc] = useState<string>('');
+  const [dispatchFloor, setDispatchFloor] = useState<number>(1);
+  const [dispatchSeverity, setDispatchSeverity] = useState<'low' | 'medium' | 'high'>('medium');
+
+  // Google Action: Broadcast Post Form
+  const [broadcastTitle, setBroadcastTitle] = useState<string>('');
+  const [broadcastText, setBroadcastText] = useState<string>('');
+  const [broadcastCategory, setBroadcastCategory] = useState<string>('Disposal Status');
+  const [showBroadcastSuccess, setShowBroadcastSuccess] = useState<boolean>(false);
 
   // Network Loading trackers
   const [loading, setLoading] = useState<boolean>(true);
@@ -174,6 +241,155 @@ export default function App() {
       setUsers(usersDoc);
     } catch (err) {
       alert("Registration failed");
+    }
+  };
+
+  // Google Sign-In Simulations & Event Dispatches
+  const handleGoogleSelectAccount = async (email: string, name: string) => {
+    try {
+      const existing = users.find(u => u.username.toLowerCase() === email.toLowerCase().trim());
+      if (existing) {
+        setGoogleUser({
+          name: existing.name,
+          email: existing.username,
+          avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${existing.name}`,
+          role: existing.role,
+          portalId: existing.portalId,
+          unitNumber: 'Flat 101',
+          focusCategory: 'All Eco Waste'
+        });
+        setLoggedInUser(existing);
+        
+        // Match active portal
+        const pt = portals.find(p => p.id === existing.portalId);
+        if (pt) setCurrentPortal(pt);
+
+        setShowGoogleModal(false);
+      } else {
+        // New user! Initiate profile details form
+        setGoogleFormEmail(email);
+        setGoogleFormName(name);
+        setGoogleFormRole('resident');
+        if (portals.length > 0) {
+          setGoogleFormPortalId(portals[0].id);
+        }
+        setIsNewGoogleUser(true);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleGoogleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          username: googleFormEmail.toLowerCase().trim(), 
+          role: googleFormRole, 
+          portalId: googleFormPortalId, 
+          name: googleFormName, 
+          bypassFace: true 
+        })
+      });
+      const userDoc = await res.json();
+      
+      // Update list
+      const resUsers = await fetch('/api/users');
+      const usersDoc = await resUsers.json();
+      setUsers(usersDoc);
+
+      setGoogleUser({
+        name: userDoc.name,
+        email: userDoc.username,
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${userDoc.name}`,
+        role: userDoc.role,
+        portalId: userDoc.portalId,
+        unitNumber: googleFormUnit || 'Flat 202',
+        focusCategory: googleFormFocus
+      });
+      setLoggedInUser(userDoc);
+
+      const pt = portals.find(p => p.id === userDoc.portalId);
+      if (pt) setCurrentPortal(pt);
+
+      setIsNewGoogleUser(false);
+      setShowGoogleModal(false);
+    } catch (err) {
+      alert("Google Eco Profile registration failed");
+    }
+  };
+
+  const handleGoogleLogout = () => {
+    setGoogleUser(null);
+    // Default back to Greenwood Resident flat 101 state for demo
+    const defaultUser = users.find((u: any) => u.id === 'user-3') || null;
+    setLoggedInUser(defaultUser);
+  };
+
+  const handleGoogleSubmitBroadcast = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleUser || !broadcastTitle || !broadcastText) return;
+
+    const newBroadcast = {
+      id: `g-up-${Date.now()}`,
+      name: googleUser.name,
+      email: googleUser.email,
+      title: broadcastTitle,
+      text: broadcastText,
+      category: broadcastCategory,
+      createdAt: new Date().toISOString()
+    };
+
+    setGoogleUpdates(prev => [newBroadcast, ...prev]);
+    setBroadcastTitle('');
+    setBroadcastText('');
+    setShowBroadcastSuccess(true);
+    setTimeout(() => setShowBroadcastSuccess(false), 4000);
+  };
+
+  const handleGoogleSubmitDispatchAlert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleUser || !dispatchDesc) return;
+
+    const targetLabel = dispatchTarget === 'rews' ? 'REWS TEAM' : dispatchTarget === 'committee' ? 'ASSOCIATION COMMITTEE' : 'REWS CARETAKER STAFF';
+    const alertNotes = `[REQUEST VIA GOOGLE USER - DISPATCHED TO ${targetLabel}]: Floor ${dispatchFloor} - ${dispatchDesc}`;
+
+    try {
+      // 1. Create the alert
+      const alertData = {
+        portalId: googleUser.portalId || currentPortal?.id || 'portal-1',
+        floor: Number(dispatchFloor),
+        status: 'alerted' as const,
+        notes: alertNotes,
+        aiClassification: {
+          category: googleUser.focusCategory || 'General Items',
+          recyclability: 'Urgent Recovery Needed',
+          instructions: `Handover directly to ${targetLabel}. Ensure proper segregative containment immediately.`,
+          estimatedWeight: '6.5 KG',
+          carbonOffset: '14.2 Kg'
+        }
+      };
+
+      await handleCreateAlert(alertData);
+
+      // 2. Create the notification
+      await handleAddNotification({
+        portalId: googleUser.portalId || currentPortal?.id || 'portal-1',
+        floor: Number(dispatchFloor),
+        title: `⚠️ DISPATCH REQUEST RECEIVED: ${targetLabel}`,
+        body: `${googleUser.name} requested immediate attention: ${dispatchDesc}`,
+        senderName: googleUser.name,
+        severity: dispatchSeverity
+      });
+
+      setDispatchDesc('');
+      setShowDispatchSuccess(true);
+      setTimeout(() => setShowDispatchSuccess(false), 4000);
+    } catch (err) {
+      alert("Failed to register alert request");
     }
   };
 
@@ -404,6 +620,43 @@ export default function App() {
             >
               <TrendingUp className="h-3.5 w-3.5 inline mr-1.5" /> Live Metrics
             </button>
+            <button
+              onClick={() => setActiveTab('national')}
+              className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-tight transition-all cursor-pointer border-2 border-black ${activeTab === 'national' ? 'bg-emerald-600 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white hover:bg-zinc-100 text-black'}`}
+              aria-label="Toggle national coverage map tab"
+            >
+              <Globe className="h-3.5 w-3.5 inline mr-1.5" /> National Coverage
+            </button>
+          </div>
+
+          {/* Google Auth status section */}
+          <div className="flex items-center gap-2 lg:border-l-2 lg:border-black/20 lg:pl-4 self-end lg:self-center">
+            {googleUser ? (
+              <div className="flex items-center gap-2 bg-white border-2 border-black rounded-2xl px-3 py-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <img src={googleUser.avatar} className="h-6 w-6 rounded-full border border-black bg-zinc-100" alt="Avatar" referrerPolicy="no-referrer" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase tracking-tight text-black leading-none">{googleUser.name}</p>
+                  <p className="text-[8px] font-bold text-zinc-500 leading-none">{googleUser.email}</p>
+                </div>
+                <button
+                  onClick={handleGoogleLogout}
+                  className="p-1 bg-red-100 hover:bg-red-200 border border-black rounded-lg cursor-pointer transition-all ml-1"
+                  title="Sign out of Google"
+                >
+                  <LogOut className="h-3.5 w-3.5 text-red-600" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setIsNewGoogleUser(false);
+                  setShowGoogleModal(true);
+                }}
+                className="px-4 py-2 bg-white hover:bg-zinc-100 text-black border-2 border-black rounded-2xl text-xs font-black uppercase tracking-tight flex items-center gap-1.5 cursor-pointer shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all"
+              >
+                <span>🌐</span> Login with Google
+              </button>
+            )}
           </div>
 
         </div>
@@ -427,6 +680,227 @@ export default function App() {
             >
               DISMISS
             </button>
+          </div>
+        )}
+
+        {/* Google User - Community Eco-Stewardship Action & Dispatch Hub */}
+        {googleUser && (
+          <div className="bg-[#FAF8F2] border-4 border-black rounded-3xl p-6 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] mb-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-black pb-4 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 bg-[#FFD700] border-2 border-black rounded-2xl flex items-center justify-center text-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  🌐
+                </div>
+                <div>
+                  <span className="bg-[#7C3AED] text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
+                    Google Auth Eco Session Active
+                  </span>
+                  <h3 className="text-xl font-black uppercase tracking-tight text-black mt-1 flex items-center gap-1.5">
+                    Google Eco-Stewardship & Dispatch Hub
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-white border-2 border-black rounded-2xl px-3.5 py-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs font-bold text-black">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse border border-black" />
+                <span>Logged in: <strong className="underline decoration-2">{googleUser.name}</strong> ({googleUser.role})</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+              
+              {/* Actions columns - 8 cols */}
+              <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Section A: Public Broadcast Update form */}
+                <div className="bg-white border-2 border-black rounded-2xl p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5 mb-2">
+                      <Megaphone className="h-4 w-4 text-[#7C3AED]" />
+                      📣 Post Public Update / Broadcast
+                    </h4>
+                    <p className="text-[10px] font-bold text-zinc-500 mb-3">
+                      Provide real-time updates regarding sorting hubs, dry recyclables collection, or organic compost status.
+                    </p>
+
+                    <form onSubmit={handleGoogleSubmitBroadcast} className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Update Title</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Cardboard dropped off in Block C"
+                          value={broadcastTitle}
+                          onChange={(e) => setBroadcastTitle(e.target.value)}
+                          className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black placeholder:text-zinc-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-black block mb-1">Category</label>
+                          <select
+                            value={broadcastCategory}
+                            onChange={(e) => setBroadcastCategory(e.target.value)}
+                            className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black focus:outline-none"
+                          >
+                            <option value="Disposal Status">Disposal Status</option>
+                            <option value="Cleanup Update">Cleanup Update</option>
+                            <option value="Eco Tip / Message">Eco Tip</option>
+                            <option value="Donation Alert">Donation Alert</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-black block mb-1">Sector Scope</label>
+                          <span className="w-full bg-zinc-100 border border-black p-2.5 rounded-xl text-xs font-bold block truncate">
+                            {currentPortal?.name}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Broadcast Details</label>
+                        <textarea
+                          required
+                          rows={2}
+                          placeholder="Provide details about materials, weight or location..."
+                          value={broadcastText}
+                          onChange={(e) => setBroadcastText(e.target.value)}
+                          className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black placeholder:text-zinc-400 focus:outline-none resize-none"
+                        />
+                      </div>
+
+                      {showBroadcastSuccess && (
+                        <div className="bg-emerald-100 text-emerald-800 text-[10px] p-2.5 rounded-xl border border-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span>Broadcast posted! It has been successfully compiled into the Community Live Feed.</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black uppercase tracking-wider text-xs py-2 px-4 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all cursor-pointer"
+                      >
+                        Publish Broadcast Update
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Section B: Dispatch Request Alert form */}
+                <div className="bg-white border-2 border-black rounded-2xl p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5 mb-2">
+                      <Bell className="h-4 w-4 text-[#F43F5E] animate-bounce" />
+                      🚨 Dispatch High-Priority Alert Request
+                    </h4>
+                    <p className="text-[10px] font-bold text-zinc-500 mb-3">
+                      Lodge high-priority sorting issues or alerts to the Association Committee, REWS Stewardship, or Supervisor.
+                    </p>
+
+                    <form onSubmit={handleGoogleSubmitDispatchAlert} className="space-y-3">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Target Recipient Team</label>
+                        <select
+                          value={dispatchTarget}
+                          onChange={(e) => setDispatchTarget(e.target.value as any)}
+                          className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black focus:outline-none"
+                        >
+                          <option value="rews">REWS Team (Waste Stewardship & Pickup)</option>
+                          <option value="committee">Building / Association Committee</option>
+                          <option value="janitor">Portal Caretaker & Supervisor</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-black block mb-1">Target Floor</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={currentPortal?.floorsCount || 10}
+                            required
+                            value={dispatchFloor}
+                            onChange={(e) => setDispatchFloor(Number(e.target.value))}
+                            className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase text-black block mb-1">Urgency</label>
+                          <select
+                            value={dispatchSeverity}
+                            onChange={(e) => setDispatchSeverity(e.target.value as any)}
+                            className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black focus:outline-none"
+                          >
+                            <option value="low">Low Priority</option>
+                            <option value="medium">Medium Priority</option>
+                            <option value="high">High (Dangerous/Overflow)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Alert Details / Complaint</label>
+                        <textarea
+                          required
+                          rows={2}
+                          placeholder="Describe the issue (e.g. Hazardous spill, blocked collection shoot, overflowing organic bin...)"
+                          value={dispatchDesc}
+                          onChange={(e) => setDispatchDesc(e.target.value)}
+                          className="w-full bg-[#FAF8F2] border-2 border-black p-2 rounded-xl text-xs font-black placeholder:text-zinc-400 focus:outline-none resize-none"
+                        />
+                      </div>
+
+                      {showDispatchSuccess && (
+                        <div className="bg-amber-100 text-amber-900 text-[10px] p-2.5 rounded-xl border border-amber-400 font-bold flex items-center gap-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                          <span>ALERT DISPATCHED! Transmitted directly to target systems. Live indicators have synchronized!</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="w-full bg-zinc-950 hover:bg-zinc-900 text-white font-black uppercase tracking-wider text-xs py-2 px-4 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all cursor-pointer"
+                      >
+                        Transmit Dispatch Request
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Broadcast live updates list - 4 cols */}
+              <div className="lg:col-span-4 bg-white border-2 border-black rounded-2xl p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                <div className="space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5 border-b border-zinc-200 pb-2">
+                    <span>📡 Live Community Feed</span>
+                  </h4>
+
+                  <div className="space-y-3.5 overflow-y-auto max-h-[290px] pr-1">
+                    {googleUpdates.map((update) => (
+                      <div key={update.id} className="bg-zinc-50 border border-black p-3 rounded-xl space-y-1 relative shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
+                        <span className="absolute top-2 right-2 bg-black text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">
+                          {update.category}
+                        </span>
+                        <h5 className="text-[11px] font-black text-black leading-tight uppercase pr-16">{update.title}</h5>
+                        <p className="text-[10px] text-zinc-650 leading-relaxed font-semibold">{update.text}</p>
+                        
+                        <div className="flex items-center justify-between pt-1 text-[8px] font-black text-zinc-400 uppercase">
+                          <span>By: {update.name}</span>
+                          <span>{new Date(update.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-100 text-[9px] font-black text-zinc-400 uppercase text-center">
+                  Updates persist live for all local sector residents.
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
 
@@ -496,6 +970,11 @@ export default function App() {
             />
           )}
 
+          {/* VI. India Map Interactive Projection */}
+          {activeTab === 'national' && (
+            <IndiaMap />
+          )}
+
         </div>
 
       </main>
@@ -512,6 +991,218 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {/* 5. Google Sign-In & Onboarding Modal Dialog */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#FAF8F2] border-4 border-black rounded-3xl max-w-lg w-full overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col max-h-[90vh]">
+            
+            {/* Modal header */}
+            <div className="bg-[#FFD700] p-5 border-b-4 border-black flex justify-between items-center text-black">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🌐</span>
+                <h4 className="font-black uppercase tracking-tight text-sm">
+                  {isNewGoogleUser ? "Setup Your Google Eco Profile" : "Sign In with Google Account"}
+                </h4>
+              </div>
+              <button 
+                onClick={() => setShowGoogleModal(false)}
+                className="text-black hover:text-red-600 font-black text-sm cursor-pointer border-2 border-black bg-white rounded-lg px-2 py-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                CLOSE
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-black">
+              
+              {!isNewGoogleUser ? (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold leading-relaxed text-zinc-600">
+                      Welcome to the Google Sign-In gateway. Select a demo Google profile below or enter a custom address to test the workflow:
+                    </p>
+                  </div>
+
+                  {/* Preloaded Demo accounts */}
+                  <div className="space-y-2.5">
+                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider font-bold">Demo Quick Connect Profiles</span>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        onClick={() => handleGoogleSelectAccount('arun.k@gmail.com', 'Arun Kumar')}
+                        className="bg-white hover:bg-zinc-100 border-2 border-black p-3 rounded-2xl text-left flex items-center gap-3 cursor-pointer shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all"
+                      >
+                        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Arun Kumar" className="h-8 w-8 rounded-full border border-black bg-zinc-50" referrerPolicy="no-referrer" />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-tight leading-none text-black">Arun Kumar</p>
+                          <p className="text-[9px] text-zinc-400 font-bold mt-1">arun.k@gmail.com</p>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => handleGoogleSelectAccount('sneha.patel@gmail.com', 'Sneha Patel')}
+                        className="bg-white hover:bg-zinc-100 border-2 border-black p-3 rounded-2xl text-left flex items-center gap-3 cursor-pointer shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all"
+                      >
+                        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Sneha Patel" className="h-8 w-8 rounded-full border border-black bg-zinc-50" referrerPolicy="no-referrer" />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-tight leading-none text-black">Sneha Patel</p>
+                          <p className="text-[9px] text-zinc-400 font-bold mt-1">sneha.patel@gmail.com</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-black/10"></div>
+                    <span className="flex-shrink mx-4 text-[10px] text-zinc-400 font-black uppercase tracking-wider">Or custom google authentication</span>
+                    <div className="flex-grow border-t border-black/10"></div>
+                  </div>
+
+                  {/* Custom Account Inputs */}
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (googleFormEmail && googleFormName) {
+                      handleGoogleSelectAccount(googleFormEmail, googleFormName);
+                    }
+                  }} className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-black block mb-1">Enter Google Account Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ramesh Dev"
+                        value={googleFormName}
+                        onChange={(e) => setGoogleFormName(e.target.value)}
+                        className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-black block mb-1">Enter Google Account Email</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="e.g. ramesh.dev@gmail.com"
+                        value={googleFormEmail}
+                        onChange={(e) => setGoogleFormEmail(e.target.value)}
+                        className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all cursor-pointer"
+                    >
+                      Verify Google Credentials
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <div className="bg-amber-100 border-2 border-amber-400 rounded-2xl p-4 text-xs font-bold text-amber-900 leading-relaxed space-y-1.5">
+                    <p className="font-black text-black text-xs uppercase flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      NEW GOOGLE CITIZEN DETECTED!
+                    </p>
+                    <p className="text-[11px]">
+                      The address <strong className="underline">{googleFormEmail}</strong> is not yet linked with our hyperlocal environmental databases. Let's customize your local profile details below:
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleGoogleRegisterSubmit} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Authenticated Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={googleFormName}
+                          onChange={(e) => setGoogleFormName(e.target.value)}
+                          className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Google Email</label>
+                        <input
+                          type="email"
+                          disabled
+                          value={googleFormEmail}
+                          className="w-full bg-zinc-100 border border-black/25 p-2.5 rounded-xl text-xs font-bold text-zinc-500 cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Stewardship Category</label>
+                        <select
+                          value={googleFormRole}
+                          onChange={(e) => setGoogleFormRole(e.target.value as any)}
+                          className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                        >
+                          <option value="resident">Resident Citizen</option>
+                          <option value="collector">Stewardship Collector</option>
+                          <option value="supervisor">Portal Supervisor</option>
+                          <option value="donor">Charitable Donor</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Primary Eco-Disposal Focus</label>
+                        <select
+                          value={googleFormFocus}
+                          onChange={(e) => setGoogleFormFocus(e.target.value)}
+                          className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                        >
+                          <option value="Electronics">Electronics Recycling</option>
+                          <option value="Organic Composting">Organic Composting</option>
+                          <option value="Textiles Reclamation">Textiles Reclamation</option>
+                          <option value="Dry Waste Segregation">Dry Waste Segregation</option>
+                          <option value="General Metal / Glass">General Metal & Glass</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Sector Portal Association</label>
+                        <select
+                          value={googleFormPortalId}
+                          onChange={(e) => setGoogleFormPortalId(e.target.value)}
+                          className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                        >
+                          {portals.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-black block mb-1">Flat / Unit / Suite Number</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Block B-304"
+                          value={googleFormUnit}
+                          onChange={(e) => setGoogleFormUnit(e.target.value)}
+                          className="w-full bg-white border-2 border-black p-2.5 rounded-xl text-xs font-black focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full bg-[#10B981] hover:bg-[#059669] text-white font-black uppercase tracking-widest text-xs py-3 px-4 rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all cursor-pointer mt-2"
+                    >
+                      Onboard Eco Account & Sync Google
+                    </button>
+                  </form>
+                </>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

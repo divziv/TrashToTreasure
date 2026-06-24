@@ -67,7 +67,7 @@ export interface DonationItem {
   donorName: string;
   donorContact?: string;
   title: string;
-  category: 'clothes' | 'food' | 'books' | 'others';
+  category: 'clothes' | 'food' | 'books' | 'electronics' | 'others';
   quantity: string;
   description: string;
   imageUrl?: string;
@@ -99,3 +99,33 @@ export interface PortalImpact {
   hazardWasteKg: number;
   participationRate: number; // 0 to 100
 }
+
+export type DomainRoleType = "APARTMENT" | "OFFICE" | "UNIVERSITY";
+
+export type GeoEntity = {
+  id: string;
+  name: string;
+  roleType: DomainRoleType;
+  centerLat: number;
+  centerLng: number;
+  boundary?: Array<{ lat: number; lng: number }>; // preferred polygon
+  radiusMeters?: number; // fallback circular zone
+};
+
+export type IntersectionResult = {
+  zoneId: string;
+  entitiesInvolved: string[]; // apartment/office/university IDs
+  overlapArea: number; // sq meters
+  centroid: { lat: number; lng: number };
+  suggestedDropoffPoints: string[];
+};
+
+export interface ContributionLedgerEntry {
+  id: string;
+  date: string;
+  title: string;
+  category: string;
+  co2SavedKg: number;
+  pointsEarned: number;
+}
+
