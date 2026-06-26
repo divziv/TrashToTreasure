@@ -90,4 +90,67 @@ body {
   box-shadow: 4px 4px 0px 0px #000000 !important;
 }
 
+/* ---- HIGH-CONTRAST ACCESSIBILITY MODE OVERRIDES ---- */
+.high-contrast-active,
+.high-contrast-active body {
+  background-color: #000000 !important;
+  color: #FFFF00 !important;
+}
+
+.high-contrast-active div,
+.high-contrast-active section,
+.high-contrast-active header,
+.high-contrast-active main,
+.high-contrast-active article,
+.high-contrast-active aside,
+.high-contrast-active nav,
+.high-contrast-active form,
+.high-contrast-active select,
+.high-contrast-active select option {
+  background-color: #000000 !important;
+  color: #FFFF00 !important;
+  border-color: #FFFF00 !important;
+  box-shadow: none !important;
+}
+
+.high-contrast-active h1,
+.high-contrast-active h2,
+.high-contrast-active h3,
+.high-contrast-active h4,
+.high-contrast-active h5,
+.high-contrast-active h6,
+.high-contrast-active p,
+.high-contrast-active span,
+.high-contrast-active strong,
+.high-contrast-active label,
+.high-contrast-active li,
+.high-contrast-active a {
+  color: #FFFF00 !important;
+}
+
+.high-contrast-active button,
+.high-contrast-active input,
+.high-contrast-active textarea {
+  background-color: #FFFF00 !important;
+  color: #000000 !important;
+  border-color: #FFFF00 !important;
+  box-shadow: none !important;
+}
+
+.high-contrast-active button *,
+.high-contrast-active input *,
+.high-contrast-active textarea * {
+  color: #000000 !important;
+}
+
+.high-contrast-active svg,
+.high-contrast-active svg path,
+.high-contrast-active svg circle,
+.high-contrast-active svg line,
+.high-contrast-active svg polyline,
+.high-contrast-active svg rect {
+  stroke: currentColor !important;
+}
+
+
 

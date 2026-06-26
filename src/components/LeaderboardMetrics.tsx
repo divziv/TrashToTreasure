@@ -54,11 +54,74 @@ export default function LeaderboardMetrics({
   const d3ContainerRef = useRef<SVGSVGElement | null>(null);
   const [heatmapView, setHeatmapView] = useState<'waste' | 'donation'>('donation');
 
-  // Generate 30 days of realistic daily waste management trends data
+  // Hierarchy selection states
+  const [selectedSociety, setSelectedSociety] = useState<string>('Greenwood Society');
+  const [selectedBlock, setSelectedBlock] = useState<string>('Block A');
+  const [selectedFloor, setSelectedFloor] = useState<string>('Floor 1');
+  const [selectedFlat, setSelectedFlat] = useState<string>('Flat 101');
+
+  const [selectedOrganization, setSelectedOrganization] = useState<string>('Google');
+  const [selectedCampus, setSelectedCampus] = useState<string>('Google Infi');
+
+  const [selectedUniversity, setSelectedUniversity] = useState<string>('City University');
+  const [selectedUnivBlock, setSelectedUnivBlock] = useState<string>('Engineering Department');
+
+  // Multiplier calculation for the selected level of the hierarchy
+  const getHierarchyMultiplier = () => {
+    if (filterType === 'all') return 1.0;
+    
+    if (filterType === 'apartment') {
+      let multiplier = 1.0;
+      if (selectedSociety === 'Sunshine Heights') multiplier *= 0.82;
+      else if (selectedSociety === 'Harmony Heights') multiplier *= 0.65;
+      
+      if (selectedBlock === 'Block B') multiplier *= 0.88;
+      else if (selectedBlock === 'Block C') multiplier *= 0.74;
+      else if (selectedBlock === 'Block D') multiplier *= 0.60;
+      
+      const fNum = parseInt(selectedFloor.replace('Floor ', '')) || 0;
+      multiplier *= Math.max(0.4, 1 - (fNum * 0.02));
+      
+      if (selectedFlat === 'Flat 102') multiplier *= 0.94;
+      else if (selectedFlat === 'Flat 103') multiplier *= 0.86;
+      else if (selectedFlat.includes('2')) multiplier *= 0.80;
+      
+      return Math.max(0.01, multiplier);
+    }
+    
+    if (filterType === 'office') {
+      let multiplier = 1.0;
+      if (selectedOrganization === 'Microsoft') multiplier *= 0.90;
+      else if (selectedOrganization === 'Tata Consultancy') multiplier *= 1.25;
+      else if (selectedOrganization === 'Infosys') multiplier *= 0.75;
+      
+      if (selectedCampus && (selectedCampus.includes('Signature') || selectedCampus.includes('Block B') || selectedCampus.includes('Deccan') || selectedCampus.includes('Eco'))) {
+        multiplier *= 0.82;
+      }
+      return Math.max(0.01, multiplier);
+    }
+    
+    if (filterType === 'university') {
+      let multiplier = 1.0;
+      if (selectedUniversity === 'IIT Bombay') multiplier *= 1.38;
+      else if (selectedUniversity === 'Anna University') multiplier *= 0.84;
+      
+      if (selectedUnivBlock === 'Science Block') multiplier *= 0.75;
+      else if (selectedUnivBlock.includes('Hostel')) multiplier *= 0.60;
+      else if (selectedUnivBlock === 'PG Block') multiplier *= 0.50;
+      return Math.max(0.01, multiplier);
+    }
+    
+    return 1.0;
+  };
+
+  const multiplier = getHierarchyMultiplier();
+
+  // Generate 30 days of realistic daily waste management trends data scaled by current hierarchy multiplier
   const generateHistoricalTrendData = () => {
     const data = [];
-    const baseWet = metrics ? Math.round(metrics.totalWasteCollectedKg * 0.38 / 30) : 12;
-    const baseDry = metrics ? Math.round(metrics.totalWasteCollectedKg * 0.52 / 30) : 18;
+    const baseWet = metrics ? Math.round((metrics.totalWasteCollectedKg * multiplier) * 0.38 / 30) : 12;
+    const baseDry = metrics ? Math.round((metrics.totalWasteCollectedKg * multiplier) * 0.52 / 30) : 18;
     
     for (let i = 29; i >= 0; i--) {
       const date = new Date();
@@ -119,7 +182,7 @@ export default function LeaderboardMetrics({
         data.push({
           col: c,
           row: r,
-          val: Math.round(Math.max(10, Math.min(100, score))),
+          val: Math.round(Math.max(10, Math.min(100, score * multiplier))),
           label: siteLabel
         });
       }
@@ -257,7 +320,7 @@ export default function LeaderboardMetrics({
       .style('fill', '#000')
       .text('ACTIVITY');
 
-  }, [heatmapView, loading, metrics]);
+  }, [heatmapView, loading, metrics, multiplier]);
   
   const handleExportSummary = () => {
     if (!metrics) return;
@@ -407,6 +470,177 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
         </div>
       </div>
 
+      {/* Hierarchical Sub-Level Selectors */}
+      {filterType !== 'all' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#FAF8F2] border-2 border-black p-4 rounded-3xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-3"
+        >
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-zinc-500 tracking-wider">
+            <span>🏢</span>
+            <span>Selected Sector Hierarchy Path:</span>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {filterType === 'apartment' && (
+              <>
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-sky-600">Society Dropdown</label>
+                  <select 
+                    value={selectedSociety} 
+                    onChange={(e) => setSelectedSociety(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="Greenwood Society">Greenwood Society</option>
+                    <option value="Sunshine Heights">Sunshine Heights</option>
+                    <option value="Harmony Heights">Harmony Heights</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-sky-600">Block</label>
+                  <select 
+                    value={selectedBlock} 
+                    onChange={(e) => setSelectedBlock(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="Block A">Block A</option>
+                    <option value="Block B">Block B</option>
+                    <option value="Block C">Block C</option>
+                    <option value="Block D">Block D</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-sky-600">Floor</label>
+                  <select 
+                    value={selectedFloor} 
+                    onChange={(e) => setSelectedFloor(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    {Array.from({ length: 22 }, (_, i) => i === 0 ? 'Ground' : `Floor ${i}`).map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-black uppercase text-sky-600">Flat (Optional)</label>
+                  <select 
+                    value={selectedFlat} 
+                    onChange={(e) => setSelectedFlat(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="Flat 101">Flat 101</option>
+                    <option value="Flat 102">Flat 102</option>
+                    <option value="Flat 103">Flat 103</option>
+                    <option value="Flat 201">Flat 201</option>
+                    <option value="Flat 202">Flat 202</option>
+                    <option value="Flat 203">Flat 203</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {filterType === 'office' && (
+              <>
+                <div className="space-y-1 col-span-2">
+                  <label className="block text-[10px] font-black uppercase text-indigo-600">Organization</label>
+                  <select 
+                    value={selectedOrganization} 
+                    onChange={(e) => {
+                      setSelectedOrganization(e.target.value);
+                      if (e.target.value === 'Google') setSelectedCampus('Google Infi');
+                      else if (e.target.value === 'Microsoft') setSelectedCampus('Microsoft GEC');
+                      else if (e.target.value === 'Tata Consultancy') setSelectedCampus('TCS Synergy Park');
+                      else if (e.target.value === 'Infosys') setSelectedCampus('Infosys Block 3');
+                    }}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="Google">Google</option>
+                    <option value="Microsoft">Microsoft</option>
+                    <option value="Tata Consultancy">Tata Consultancy Services</option>
+                    <option value="Infosys">Infosys</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 col-span-2">
+                  <label className="block text-[10px] font-black uppercase text-indigo-600">Campus Dropdown</label>
+                  <select 
+                    value={selectedCampus} 
+                    onChange={(e) => setSelectedCampus(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    {selectedOrganization === 'Google' && (
+                      <>
+                        <option value="Google Infi">Google Infi</option>
+                        <option value="Google Signature Towers">Google Signature Towers</option>
+                      </>
+                    )}
+                    {selectedOrganization === 'Microsoft' && (
+                      <>
+                        <option value="Microsoft GEC">Microsoft GEC</option>
+                        <option value="Microsoft Campus Block B">Microsoft Campus Block B</option>
+                      </>
+                    )}
+                    {selectedOrganization === 'Tata Consultancy' && (
+                      <>
+                        <option value="TCS Synergy Park">TCS Synergy Park</option>
+                        <option value="TCS Deccan Park">TCS Deccan Park</option>
+                      </>
+                    )}
+                    {selectedOrganization === 'Infosys' && (
+                      <>
+                        <option value="Infosys Block 3">Infosys Block 3</option>
+                        <option value="Infosys Eco Space">Infosys Eco Space</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {filterType === 'university' && (
+              <>
+                <div className="space-y-1 col-span-2">
+                  <label className="block text-[10px] font-black uppercase text-emerald-600">Institution</label>
+                  <select 
+                    value={selectedUniversity} 
+                    onChange={(e) => setSelectedUniversity(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="City University">City University</option>
+                    <option value="IIT Bombay">IIT Bombay</option>
+                    <option value="Anna University">Anna University</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 col-span-2">
+                  <label className="block text-[10px] font-black uppercase text-emerald-600">Block / Department / Hostel</label>
+                  <select 
+                    value={selectedUnivBlock} 
+                    onChange={(e) => setSelectedUnivBlock(e.target.value)}
+                    className="w-full text-xs font-black uppercase p-2 border-2 border-black rounded-lg cursor-pointer outline-none bg-white text-black"
+                  >
+                    <option value="Engineering Department">Engineering Department</option>
+                    <option value="Science Block">Science Block</option>
+                    <option value="North Hostel">North Hostel</option>
+                    <option value="South Hostel">South Hostel</option>
+                    <option value="PG Block">PG Block</option>
+                  </select>
+                </div>
+              </>
+            )}
+          </div>
+          
+          <div className="text-[10px] font-bold text-zinc-650 flex items-center gap-1 bg-white p-2 border border-black rounded-xl">
+            <span className="text-emerald-600">⚡</span>
+            <span>Recalculated Factor: <strong className="text-black">{multiplier.toFixed(2)}x</strong>. Level coordinates are dynamically propagated.</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Dynamic Key metrics cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         
@@ -416,7 +650,7 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
           className="bg-white vibrant-border p-3 sm:p-5 rounded-3xl vibrant-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all relative overflow-hidden group"
-          data-narrate={`Total Waste Managed is ${metrics.totalWasteCollectedKg} kilograms`}
+          data-narrate={`Total Waste Managed is ${Math.round(metrics.totalWasteCollectedKg * multiplier)} kilograms`}
         >
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
             <Trash2 className="h-20 w-20 text-zinc-900" />
@@ -427,12 +661,12 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
               <Scale className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{metrics.totalWasteCollectedKg} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg</span></p>
+          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{Math.round(metrics.totalWasteCollectedKg * multiplier)} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg</span></p>
           <div className="mt-2 flex items-center gap-1.5 text-[10px] sm:text-xs">
             <span className="text-emerald-600 font-extrabold flex items-center gap-0.5">
               <TrendingUp className="h-3 w-3" /> +12%
             </span>
-            <span className="text-zinc-500 font-medium">vs historical baseline</span>
+            <span className="text-zinc-500 font-medium">vs baseline</span>
           </div>
         </motion.div>
 
@@ -442,7 +676,7 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.05 }}
           className="bg-white vibrant-border p-3 sm:p-5 rounded-3xl vibrant-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all relative overflow-hidden group"
-          data-narrate={`Greenhouse Offset is ${metrics.carbonSavedKg} kilograms of carbon dioxid`}
+          data-narrate={`Greenhouse Offset is ${Math.round(metrics.carbonSavedKg * multiplier)} kilograms of carbon dioxide`}
         >
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
             <Leaf className="h-20 w-20 text-zinc-900" />
@@ -453,10 +687,10 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
               <Leaf className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{metrics.carbonSavedKg} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg CO2e</span></p>
+          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{Math.round(metrics.carbonSavedKg * multiplier)} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg CO2e</span></p>
           <div className="mt-2 flex items-center gap-1.5 text-[10px] sm:text-xs text-zinc-550">
-            <span className="font-bold">Equivalent to planting</span>
-            <span className="font-extrabold text-[#7C3AED]">{(metrics.carbonSavedKg / 22).toFixed(0)} trees</span>
+            <span className="font-bold">Planting equiv:</span>
+            <span className="font-extrabold text-[#7C3AED]">{Math.max(1, Math.round((metrics.carbonSavedKg * multiplier) / 22))} trees</span>
           </div>
         </motion.div>
 
@@ -466,7 +700,7 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.1 }}
           className="bg-white vibrant-border p-3 sm:p-5 rounded-3xl vibrant-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all relative overflow-hidden group"
-          data-narrate={`Landfill Diverted is ${metrics.landfillDivertedKg} kilograms`}
+          data-narrate={`Landfill Diverted is ${Math.round(metrics.landfillDivertedKg * multiplier)} kilograms`}
         >
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
             <Flame className="h-20 w-20 text-zinc-900" />
@@ -477,10 +711,10 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
               <Flame className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{metrics.landfillDivertedKg} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg</span></p>
+          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{Math.round(metrics.landfillDivertedKg * multiplier)} <span className="text-xs sm:text-sm font-bold text-zinc-500">Kg</span></p>
           <div className="mt-2 flex items-center gap-1.5 text-[10px] sm:text-xs">
-            <span className="text-blue-600 font-extrabold">{(metrics.totalWasteCollectedKg > 0 ? (metrics.landfillDivertedKg / metrics.totalWasteCollectedKg * 100).toFixed(0) : 92)}% Diversion</span>
-            <span className="text-zinc-500 font-medium">diverted from dump yards</span>
+            <span className="text-blue-600 font-extrabold">{Math.round((metrics.landfillDivertedKg / metrics.totalWasteCollectedKg) * 100)}% Diversion</span>
+            <span className="text-zinc-500 font-medium">from dumps</span>
           </div>
         </motion.div>
 
@@ -490,7 +724,7 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.15 }}
           className="bg-white vibrant-border p-3 sm:p-5 rounded-3xl vibrant-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all relative overflow-hidden group"
-          data-narrate={`Donation handovers logged is ${metrics.donationsDistributed} items`}
+          data-narrate={`Donation handovers logged is ${Math.max(1, Math.round(metrics.donationsDistributed * multiplier))} items`}
         >
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
             <Gift className="h-20 w-20 text-zinc-900" />
@@ -501,10 +735,10 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
               <Gift className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{metrics.donationsDistributed} <span className="text-xs sm:text-sm font-bold text-zinc-500">Offers</span></p>
+          <p className="text-2xl sm:text-4xl font-black text-zinc-900 tracking-tight">{Math.max(1, Math.round(metrics.donationsDistributed * multiplier))} <span className="text-xs sm:text-sm font-bold text-zinc-500">Offers</span></p>
           <div className="mt-2 flex items-center gap-1.5 text-[10px] sm:text-xs text-zinc-550">
-            <span className="font-bold">Compost Generated:</span>
-            <span className="font-extrabold text-amber-600">{metrics.compostGeneratedKg} Kg</span>
+            <span className="font-bold">Compost Yield:</span>
+            <span className="font-extrabold text-amber-600">{Math.round(metrics.compostGeneratedKg * multiplier)} Kg</span>
           </div>
         </motion.div>
       </div>

@@ -58,6 +58,45 @@ export default function CollectorPanel({
   const [qrScanning, setQrScanning] = useState(false);
   const [scannedBinId, setScannedBinId] = useState<string | null>(null);
 
+  // Real-time telemetry simulation state
+  const [telemetryData, setTelemetryData] = useState<{
+    floor: number;
+    wetDensity: number; // %
+    dryDensity: number; // %
+    eDensity: number; // %
+    status: 'normal' | 'warning' | 'critical';
+  }[]>([
+    { floor: 1, wetDensity: 42, dryDensity: 58, eDensity: 12, status: 'normal' },
+    { floor: 2, wetDensity: 88, dryDensity: 74, eDensity: 20, status: 'critical' },
+    { floor: 3, wetDensity: 30, dryDensity: 45, eDensity: 65, status: 'warning' },
+    { floor: 4, wetDensity: 15, dryDensity: 28, eDensity: 5, status: 'normal' },
+    { floor: 5, wetDensity: 55, dryDensity: 61, eDensity: 18, status: 'normal' },
+  ]);
+  const [isRefreshingTelemetry, setIsRefreshingTelemetry] = useState(false);
+
+  const handleRefreshTelemetry = () => {
+    setIsRefreshingTelemetry(true);
+    speakPrompt("Re-polling ultrasonic IoT sensors across all elevator corridors.");
+    setTimeout(() => {
+      setTelemetryData(prev => prev.map(item => {
+        const wet = Math.floor(Math.random() * 85) + 10;
+        const dry = Math.floor(Math.random() * 85) + 10;
+        const e = Math.floor(Math.random() * 75) + 5;
+        const maxD = Math.max(wet, dry, e);
+        const status = maxD > 80 ? 'critical' : maxD > 55 ? 'warning' : 'normal';
+        return {
+          ...item,
+          wetDensity: wet,
+          dryDensity: dry,
+          eDensity: e,
+          status
+        };
+      }));
+      setIsRefreshingTelemetry(false);
+      speakPrompt("Sensors synchronized. Live density logs active.");
+    }, 1500);
+  };
+
   const handleScanPresetBin = (binId: string, floorNum: number, catName: string) => {
     setQrScanning(true);
     setScannedBinId(null);
@@ -616,6 +655,137 @@ export default function CollectorPanel({
               </button>
             </div>
 
+          </div>
+
+          {/* Real-time 'Bin Capacity' Monitor Dashboard */}
+          <div className="bg-white border-2 border-black rounded-3xl p-5 sm:p-7 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-zinc-100 pb-4">
+              <div>
+                <h3 className="text-md font-black text-black uppercase tracking-tight flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 animate-pulse" />
+                  Real-time IoT Bin Capacity Telemetry
+                </h3>
+                <p className="text-xs font-bold text-zinc-500">Live ultrasonic sensors mapping the waste density levels per floorplate.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshTelemetry}
+                disabled={isRefreshingTelemetry}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFD700] hover:bg-[#E6C200] text-black text-xs font-black rounded-xl border-2 border-black cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50 uppercase tracking-wide shrink-0"
+              >
+                {isRefreshingTelemetry ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Polling Sensors...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Poll Live Sensors
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Density bar charts container */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {telemetryData.map((data) => {
+                const isSelectedFloor = selectedFloor === data.floor;
+                return (
+                  <div 
+                    key={data.floor} 
+                    className={`p-4 rounded-2xl border-2 flex flex-col justify-between space-y-4 relative overflow-hidden transition-all ${
+                      isSelectedFloor 
+                        ? 'border-black bg-[#FAF8F2] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] scale-[1.03] z-10' 
+                        : 'border-zinc-200 bg-white hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    }`}
+                  >
+                    {/* Status badge */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-zinc-400">Level {data.floor}</span>
+                      <span className={`h-2.5 w-2.5 rounded-full border border-black/20 ${
+                        data.status === 'critical' ? 'bg-red-500 animate-ping' :
+                        data.status === 'warning' ? 'bg-amber-400' :
+                        'bg-emerald-500'
+                      }`} title={`Status: ${data.status.toUpperCase()}`} />
+                    </div>
+
+                    {/* Miniature Bar chart stacks */}
+                    <div className="space-y-2.5">
+                      {/* Wet waste */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[8px] font-bold text-zinc-500 uppercase">
+                          <span>💧 Organic Wet</span>
+                          <span className="font-mono text-black font-black">{data.wetDensity}%</span>
+                        </div>
+                        <div className="bg-zinc-100 border border-black/10 h-2.5 rounded-full p-0.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              data.wetDensity > 80 ? 'bg-red-500' : data.wetDensity > 55 ? 'bg-amber-400' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${data.wetDensity}%` }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Dry waste */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[8px] font-bold text-zinc-500 uppercase">
+                          <span>📦 Dry Sorting</span>
+                          <span className="font-mono text-black font-black">{data.dryDensity}%</span>
+                        </div>
+                        <div className="bg-zinc-100 border border-black/10 h-2.5 rounded-full p-0.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              data.dryDensity > 80 ? 'bg-red-500' : data.dryDensity > 55 ? 'bg-amber-400' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${data.dryDensity}%` }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* E-waste */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[8px] font-bold text-zinc-500 uppercase">
+                          <span>⚡ Haz E-waste</span>
+                          <span className="font-mono text-black font-black">{data.eDensity}%</span>
+                        </div>
+                        <div className="bg-zinc-100 border border-black/10 h-2.5 rounded-full p-0.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              data.eDensity > 80 ? 'bg-red-500' : data.eDensity > 55 ? 'bg-amber-400' : 'bg-[#7C3AED]'
+                            }`}
+                            style={{ width: `${data.eDensity}%` }} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick floor action button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFloor(data.floor);
+                        speakPrompt(`Inspecting Level ${data.floor} IoT density map.`);
+                      }}
+                      className={`w-full py-1.5 text-[9px] font-black uppercase rounded-lg border-2 border-black transition-colors ${
+                        isSelectedFloor ? 'bg-black text-white hover:bg-zinc-900' : 'bg-white hover:bg-zinc-100 text-black'
+                      }`}
+                    >
+                      Inspect Level
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Warning advisory block */}
+            <div className="bg-amber-50 border border-amber-400/50 p-3 rounded-xl text-[11px] font-bold text-amber-900 flex items-start gap-2 leading-relaxed text-left">
+              <span className="text-sm">⚠️</span>
+              <p>
+                <strong>Rapid Caretaker Intervention Alert:</strong> Bins with capacity levels exceeding <strong className="text-red-600 font-extrabold uppercase">80% (Critical)</strong> require immediate physical dispatch or sweep notice alerts to avoid corridor obstruction penalties.
+              </p>
+            </div>
           </div>
 
         </div>

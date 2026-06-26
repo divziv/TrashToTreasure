@@ -829,6 +829,38 @@ export default function ResidentPanel({
             icon: '🔋',
             unlocked: ledger.some(item => item.category.toLowerCase().includes('electron')),
             color: 'border-teal-500 bg-teal-50'
+          },
+          {
+            id: 'recycle_rookie',
+            name: 'Recycle Rookie',
+            desc: 'Make at least 1 successful donation',
+            icon: '🥚',
+            unlocked: ledger.length >= 1,
+            color: 'border-orange-400 bg-orange-50'
+          },
+          {
+            id: 'eco_enthusiast',
+            name: 'Eco Enthusiast',
+            desc: 'Process 3 or more successful donations',
+            icon: '🌱',
+            unlocked: ledger.length >= 3,
+            color: 'border-green-400 bg-green-50'
+          },
+          {
+            id: 'green_guardian',
+            name: 'Green Guardian',
+            desc: 'Process 4 or more successful donations',
+            icon: '🛡️',
+            unlocked: ledger.length >= 4,
+            color: 'border-blue-400 bg-blue-50'
+          },
+          {
+            id: 'eco_warrior',
+            name: 'Eco-Warrior',
+            desc: 'Process 5 or more successful donations!',
+            icon: '⚔️',
+            unlocked: ledger.length >= 5,
+            color: 'border-purple-500 bg-purple-50 text-purple-900 font-extrabold'
           }
         ];
 
@@ -952,6 +984,67 @@ export default function ResidentPanel({
                 </h4>
                 <p className="text-[11px] font-bold text-zinc-500">Earn credentials by participating in different categories of resource recovery.</p>
               </div>
+
+              {/* 🏆 Sustainability Rank Widget */}
+              {(() => {
+                const donCount = ledger.length;
+                let rankTitle = "Recycle Rookie";
+                let rankIcon = "🥚";
+                let nextRank = "Eco Enthusiast";
+                let leftToNext = 3 - donCount;
+                let rankColor = "bg-orange-100 border-orange-400 text-orange-950";
+                let progress = (donCount / 3) * 100;
+                
+                if (donCount >= 5) {
+                  rankTitle = "Eco-Warrior";
+                  rankIcon = "⚔️";
+                  nextRank = "Max Rank Unlocked";
+                  leftToNext = 0;
+                  rankColor = "bg-purple-100 border-purple-400 text-purple-950";
+                  progress = 100;
+                } else if (donCount >= 4) {
+                  rankTitle = "Green Guardian";
+                  rankIcon = "🛡️";
+                  nextRank = "Eco-Warrior";
+                  leftToNext = 1;
+                  rankColor = "bg-blue-100 border-blue-400 text-blue-950";
+                  progress = (donCount / 5) * 100;
+                } else if (donCount >= 3) {
+                  rankTitle = "Eco Enthusiast";
+                  rankIcon = "🌱";
+                  nextRank = "Green Guardian";
+                  leftToNext = 1;
+                  rankColor = "bg-green-100 border-green-400 text-green-950";
+                  progress = (donCount / 4) * 100;
+                }
+
+                return (
+                  <div className={`p-3 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3 ${rankColor}`}>
+                    <div className="h-10 w-10 rounded-xl bg-white border-2 border-black flex items-center justify-center text-xl shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] shrink-0">
+                      {rankIcon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-black uppercase tracking-wider opacity-75">Sustainability Rank</span>
+                        <span className="text-[8px] font-mono font-black bg-black text-white px-1.5 py-0.5 rounded leading-none">
+                          {donCount} Donations
+                        </span>
+                      </div>
+                      <h5 className="text-xs font-black uppercase tracking-tight">{rankTitle}</h5>
+                      
+                      {/* Progress Bar */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 bg-white/60 border border-black/20 h-2 rounded-full overflow-hidden p-0.5">
+                          <div className="bg-black h-full rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="text-[8px] font-black uppercase whitespace-nowrap">
+                          {leftToNext > 0 ? `${leftToNext} more to ${nextRank}` : 'Master Rank'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {badgesList.map(badge => (
@@ -1550,7 +1643,106 @@ export default function ResidentPanel({
               )}
             </div>
 
-            {/* 2. Community Milestones Progress */}
+            {/* 2. Community Donation Forecasting (Actionable Insights) */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <h3 className="text-xs font-black text-black uppercase tracking-widest bg-purple-100 border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <TrendingUp className="h-4 w-4 text-purple-600" />
+                  Donation Volume Forecasting
+                </h3>
+                <span className="text-[10px] bg-black text-white px-2 py-0.5 rounded font-mono font-black uppercase">4-Week Moving Avg</span>
+              </div>
+              <p className="text-xs font-bold text-zinc-500">Recurrent moving averages of community donation logs. Highlighted metrics signal upcoming spikes or high demand periods.</p>
+
+              {(() => {
+                const clothesCount = ledger.filter(item => item.category === 'clothes').length;
+                const foodCount = ledger.filter(item => item.category === 'food').length;
+                const booksCount = ledger.filter(item => item.category === 'books').length;
+                const othersCount = ledger.filter(item => item.category === 'others' || item.category === 'others_household').length;
+
+                const categoriesData = [
+                  {
+                    id: 'clothes',
+                    name: 'Clothes & Blankets',
+                    weeks: [12, 16, 14, 18 + clothesCount],
+                    spikeReason: 'Winter season consolidation.',
+                    action: 'Drop dry blankets at Sector A desk by Friday.'
+                  },
+                  {
+                    id: 'food',
+                    name: 'Grains & Food Packets',
+                    weeks: [25, 22, 28, 34 + foodCount],
+                    spikeReason: 'Festive season drives.',
+                    action: 'Shelters need dry cereal. Label with expiry date.'
+                  },
+                  {
+                    id: 'books',
+                    name: 'Textbooks & Novels',
+                    weeks: [8, 5, 9, 7 + booksCount],
+                    spikeReason: 'Mid-term exam consolidation.',
+                    action: 'Sort by subject (Science, Math) before handover.'
+                  },
+                  {
+                    id: 'others',
+                    name: 'Household Commodities',
+                    weeks: [15, 12, 11, 14 + othersCount],
+                    spikeReason: 'De-clutter cycles.',
+                    action: 'Ensure plastic items are fully clean and washed.'
+                  }
+                ];
+
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {categoriesData.map(cat => {
+                        const sum = cat.weeks.reduce((a, b) => a + b, 0);
+                        const movingAvg = Math.round((sum / cat.weeks.length) * 10) / 10;
+                        const lastWeek = cat.weeks[cat.weeks.length - 1];
+                        const projected = Math.round(lastWeek * 1.15 + (lastWeek - movingAvg) * 0.5);
+                        const isSpike = projected > movingAvg * 1.15;
+
+                        return (
+                          <div key={cat.id} className="bg-[#FAF8F2] border-2 border-black p-3 rounded-xl flex flex-col justify-between space-y-2 relative overflow-hidden">
+                            {isSpike && (
+                              <span className="absolute top-0 right-0 bg-rose-500 text-white font-black text-[7px] uppercase px-1.5 py-0.5 rounded-bl">
+                                📈 Spike Alert
+                              </span>
+                            )}
+                            <div>
+                              <span className="text-[9px] font-black uppercase text-zinc-500 block">{cat.name}</span>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-sm font-black text-black">{projected} items</span>
+                                <span className="text-[8px] font-bold text-zinc-400">Proj. Next Week</span>
+                              </div>
+                              <div className="flex items-end gap-1 h-6 mt-1 pb-1 border-b border-black/5">
+                                {cat.weeks.map((val, idx) => (
+                                  <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full">
+                                    <div 
+                                      className={`w-full rounded-t-sm border border-black ${idx === 3 ? 'bg-[#7C3AED]' : 'bg-zinc-300'}`} 
+                                      style={{ height: `${Math.max(10, (val / 40) * 100)}%` }} 
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="text-[9px] leading-tight space-y-1">
+                              <p className="font-extrabold text-black">
+                                <span className="text-[#7C3AED]">Reason:</span> {cat.spikeReason}
+                              </p>
+                              <p className="font-medium text-zinc-600 bg-white p-1 border border-black/10 rounded-md">
+                                💡 {cat.action}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 3. Community Milestones Progress */}
             <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex justify-between items-center flex-wrap gap-2">
                 <h3 className="text-xs font-black text-black uppercase tracking-widest bg-emerald-100 border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
