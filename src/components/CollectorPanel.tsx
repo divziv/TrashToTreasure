@@ -10,7 +10,8 @@ import {
   User, 
   AlertTriangle,
   Play,
-  RotateCcw
+  RotateCcw,
+  QrCode
 } from 'lucide-react';
 import { Portal, User as UserType, WasteAlert } from '../types';
 
@@ -51,6 +52,26 @@ export default function CollectorPanel({
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
   const [submittingAlert, setSubmittingAlert] = useState(false);
+
+  // QR Code Scanner Simulation States
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [qrScanning, setQrScanning] = useState(false);
+  const [scannedBinId, setScannedBinId] = useState<string | null>(null);
+
+  const handleScanPresetBin = (binId: string, floorNum: number, catName: string) => {
+    setQrScanning(true);
+    setScannedBinId(null);
+    speakPrompt("Activating laser camera. Scanning bin QR code.");
+    
+    setTimeout(() => {
+      setQrScanning(false);
+      setScannedBinId(binId);
+      setSelectedFloor(floorNum);
+      setCollectionStatus('completed');
+      setSweeperNotes(`Emptied and logged collection for Bin ID: ${binId} (${catName} bin) on Floor ${floorNum}.`);
+      speakPrompt(`Bin ${binId} successfully scanned. State auto updated to completed. Ready to publish.`);
+    }, 1200);
+  };
 
   // Initialize SpeechSynthesis narrator helper
   const speakPrompt = (text: string) => {
@@ -374,6 +395,85 @@ export default function CollectorPanel({
 
           {/* Main Action Form and Progress Card */}
           <div className="bg-white border-2 border-black rounded-3xl p-5 sm:p-7 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-6">
+
+            {/* QR Code Bin Scanner Card Widget */}
+            <div className="bg-slate-50 border-2 border-dashed border-black p-4 rounded-2xl space-y-3.5">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2 text-indigo-600">
+                  <QrCode className="h-5 w-5" />
+                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-black">⚡ Instant QR Bin Logger</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQrScannerOpen(!isQrScannerOpen);
+                    speakPrompt(isQrScannerOpen ? "Closing scanner" : "Activating camera laser tracker");
+                  }}
+                  className="px-3 py-1 bg-zinc-900 hover:bg-black text-white text-[10px] font-black uppercase rounded-lg border-2 border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                >
+                  {isQrScannerOpen ? "Collapse Scanner" : "Scan Bin QR"}
+                </button>
+              </div>
+
+              {isQrScannerOpen && (
+                <div className="space-y-4 pt-1">
+                  <p className="text-[11px] font-bold text-zinc-500">
+                    Point camera at the unique QR Code sticker mounted on any composting or sorting bin to auto-fill its logs instantly.
+                  </p>
+
+                  <div className="relative aspect-video max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-black bg-zinc-900 flex flex-col items-center justify-center">
+                    {/* Simulated laser scan bar */}
+                    {qrScanning && (
+                      <div className="absolute inset-x-0 top-0 h-1 bg-red-500 shadow-[0_0_8px_2px_rgba(239,68,68,0.8)] animate-bounce z-10"></div>
+                    )}
+
+                    {qrScanning ? (
+                      <div className="text-center space-y-2 text-[#10B981] font-mono text-[9px] tracking-wider">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-[#10B981]" />
+                        <span>DECODING_BIN_GEOLOCATION_STAMP_HASH...</span>
+                      </div>
+                    ) : scannedBinId ? (
+                      <div className="text-center p-3 text-emerald-800 space-y-1">
+                        <div className="h-9 w-9 bg-white border border-black rounded-full mx-auto flex items-center justify-center font-black">✔️</div>
+                        <p className="text-[10px] font-black uppercase tracking-wider">Bin scanned successfully!</p>
+                        <p className="text-[11px] font-mono bg-white px-2 py-0.5 border border-zinc-300 rounded font-black inline-block">{scannedBinId}</p>
+                      </div>
+                    ) : (
+                      <div className="text-center text-zinc-400 p-4 space-y-2">
+                        <QrCode className="h-8 w-8 mx-auto stroke-[1.5]" />
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Laser Camera Active</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preset Simulation scan targets */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase text-zinc-500 block">Tap simulation QR target to test scan:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {[
+                        { id: 'BIN-F1-ORG-892', floor: 1, cat: 'Organic Compostables' },
+                        { id: 'BIN-F2-DRY-304', floor: 2, cat: 'Dry Recyclables' },
+                        { id: 'BIN-F3-HAZ-411', floor: 3, cat: 'Hazardous E-Waste' }
+                      ].map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          disabled={qrScanning}
+                          onClick={() => handleScanPresetBin(preset.id, preset.floor, preset.cat)}
+                          className="p-2 border border-black bg-white hover:bg-amber-100 rounded-xl text-left cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <QrCode className="h-3.5 w-3.5 text-zinc-600" />
+                            <span className="font-mono text-[9px] font-black">{preset.id}</span>
+                          </div>
+                          <span className="text-[8px] font-bold text-zinc-400 block mt-0.5">{preset.cat} (Floor {preset.floor})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             
             {/* Floor selector Big Buttons for illiterate friendly taps */}
             <div>

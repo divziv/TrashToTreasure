@@ -17,8 +17,19 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Search
+  Search,
+  Scale
 } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer
+} from 'recharts';
 
 // Simplified but beautiful SVG path approximations for all major Indian States/UTs 
 // coordinates set to scale into a 600x680 viewport.
@@ -253,6 +264,45 @@ const STATE_ECO_DATA: Record<string, {
   'IN-NL': { wasteDiverted: 450, dryRecycled: 260, wetComposted: 190, co2Saved: 1020, activeResidents: 62, diligenceScore: 92.2, activeNGOs: 2, activeHubs: 1, complaintsResolved: 4, topCategory: 'Bamboo crafts packaging', recentCampaign: 'Kohima Clean Energy Drive', activeAlerts: 2, totalDonations: 45 }
 };
 
+interface Hub {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  svgX: number;
+  svgY: number;
+  type: 'Recycling' | 'Donation';
+  address: string;
+  contact: string;
+}
+
+const RECYCLING_HUBS: Hub[] = [
+  { id: 'h-1', name: 'Bengaluru Smart Recycling & Sorting Hub', lat: 12.9716, lng: 77.5946, svgX: 260, svgY: 530, type: 'Recycling', address: 'Indiranagar Main Rd, Bengaluru, Karnataka 560038', contact: '+91 80 4912 3001' },
+  { id: 'h-2', name: 'Delhi National Recycling & Donation Depot', lat: 28.6139, lng: 77.2090, svgX: 258, svgY: 196, type: 'Donation', address: 'Connaught Place Block E, New Delhi, Delhi 110001', contact: '+91 11 2301 4455' },
+  { id: 'h-3', name: 'Mumbai Western Reclamation Center', lat: 19.0760, lng: 72.8777, svgX: 210, svgY: 420, type: 'Recycling', address: 'Andheri East Link Rd, Mumbai, Maharashtra 400069', contact: '+91 22 2685 1102' },
+  { id: 'h-4', name: 'Kolkata Jute & Bio-waste Hub', lat: 22.5726, lng: 88.3639, svgX: 495, svgY: 340, type: 'Recycling', address: 'Salt Lake Sector V, Kolkata, West Bengal 700091', contact: '+91 33 2357 8890' },
+  { id: 'h-5', name: 'Chennai Textile & Apparel Donation Point', lat: 13.0827, lng: 80.2707, svgX: 315, svgY: 600, type: 'Donation', address: 'T-Nagar Bazaar, Chennai, Tamil Nadu 600017', contact: '+91 44 2815 0099' },
+  { id: 'h-6', name: 'Cyberabad Tech & E-Waste Depot', lat: 17.3850, lng: 78.4867, svgX: 310, svgY: 480, type: 'Recycling', address: 'HITEC City Phase II, Hyderabad, Telangana 500081', contact: '+91 40 4018 7766' }
+];
+
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round(R * c);
+}
+
+const mapCoordsToSvg = (lat: number, lng: number) => {
+  const x = Math.round((lng - 68) * 18.5 + 100);
+  const y = Math.round(808 - 21.4 * lat);
+  return { x, y };
+};
+
 export const IndiaMap: React.FC = () => {
   const [selectedStateId, setSelectedStateId] = useState<string>('IN-KA'); // default to Karnataka for high stats
   const [hoveredStateName, setHoveredStateName] = useState<string | null>(null);
@@ -262,11 +312,220 @@ export const IndiaMap: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [mapColorMode, setMapColorMode] = useState<'alerts' | 'standard'>('alerts');
   
+  // Geolocation and Nearby Hubs states
+  const [showNearbyHubs, setShowNearbyHubs] = useState<boolean>(false);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState<boolean>(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [closestHubId, setClosestHubId] = useState<string | null>(null);
+
+  const toggleNearbyHubs = () => {
+    if (showNearbyHubs) {
+      setShowNearbyHubs(false);
+      setUserCoords(null);
+      setClosestHubId(null);
+      setGeoError(null);
+      return;
+    }
+
+    setShowNearbyHubs(true);
+    setGeoLoading(true);
+    setGeoError(null);
+
+    if (!navigator.geolocation) {
+      setGeoError("Geolocation is not supported by your browser. Simulating mock coordinates.");
+      const mockLat = 12.9716;
+      const mockLng = 77.5946;
+      setUserCoords({ lat: mockLat, lng: mockLng });
+      findClosestHub(mockLat, mockLng);
+      setGeoLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserCoords({ lat, lng });
+        findClosestHub(lat, lng);
+        setGeoLoading(false);
+      },
+      (error) => {
+        console.warn("Geolocation API error:", error);
+        setGeoError(`Location access denied/failed (${error.message}). Simulating mock coordinates for preview.`);
+        const mockLat = 12.9716; // Default to Bengaluru
+        const mockLng = 77.5946;
+        setUserCoords({ lat: mockLat, lng: mockLng });
+        findClosestHub(mockLat, mockLng);
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+    );
+  };
+
+  const findClosestHub = (lat: number, lng: number) => {
+    let minDistance = Infinity;
+    let closestId = null;
+    RECYCLING_HUBS.forEach((hub) => {
+      const dist = getDistance(lat, lng, hub.lat, hub.lng);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestId = hub.id;
+      }
+    });
+    setClosestHubId(closestId);
+  };
+
   // Custom zoom & pan controls
   const [zoom, setZoom] = useState<number>(0.9);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: -20, y: 10 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Advanced features: State Comparison and Trend line Chart
+  const [comparedStateIds, setComparedStateIds] = useState<string[]>([]);
+  const [showTrendModal, setShowTrendModal] = useState<boolean>(false);
+
+  const getTrendData = (stateId: string) => {
+    const base = STATE_ECO_DATA[stateId] || { wasteDiverted: 1000, totalDonations: 100 };
+    const days = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'];
+    return days.map((day, idx) => {
+      const seed = stateId.charCodeAt(0) + stateId.charCodeAt(1) + idx;
+      const randWaste = Math.round(base.wasteDiverted / 7 + (seed % 15 - 7) * (base.wasteDiverted / 120));
+      const randDonation = Math.round(base.totalDonations / 7 + (seed % 5 - 2));
+      return {
+        day,
+        waste: Math.max(10, randWaste),
+        donations: Math.max(2, randDonation)
+      };
+    });
+  };
+
+  const triggerSnapshotPrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Popup blocker prevented saving snapshot. Please allow popups!");
+      return;
+    }
+    
+    const svgElement = mapSvgRef.current;
+    const svgXml = svgElement ? new XMLSerializer().serializeToString(svgElement) : '';
+    const activeStateName = INDIA_STATES_PATHS.find(s => s.id === selectedStateId)?.name || '';
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Eco-Stewardship Map Snapshot - ${activeStateName}</title>
+          <style>
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              padding: 40px;
+              background-color: #FAF8F2;
+              color: #000000;
+            }
+            .header {
+              border-bottom: 4px solid #000;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            h1 {
+              text-transform: uppercase;
+              margin: 0 0 10px 0;
+              font-size: 24px;
+            }
+            .container {
+              display: flex;
+              gap: 40px;
+            }
+            .map-box {
+              flex: 1;
+              border: 3px solid #000;
+              background: #fff;
+              padding: 20px;
+            }
+            .metadata-box {
+              width: 300px;
+              border: 3px solid #000;
+              background: #fff;
+              padding: 20px;
+            }
+            .metric {
+              margin-bottom: 15px;
+              border-bottom: 1px dashed #000;
+              padding-bottom: 5px;
+            }
+            .metric-label {
+              font-size: 10px;
+              font-weight: bold;
+              text-transform: uppercase;
+              color: #666;
+            }
+            .metric-value {
+              font-size: 18px;
+              font-weight: bold;
+            }
+            svg {
+              width: 100%;
+              max-height: 500px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🇮🇳 Swachh Bharat National Eco-Snapshot</h1>
+            <p>Generated on ${new Date().toLocaleString()} // Active Region: ${activeStateName}</p>
+          </div>
+          <div class="container">
+            <div class="map-box">
+              <h3>SVG Map Projection View</h3>
+              ${svgXml}
+            </div>
+            <div class="metadata-box">
+              <h3>Impact Metadata</h3>
+              <div class="metric">
+                <div class="metric-label">Selected State</div>
+                <div class="metric-value">${activeStateName} (${selectedStateId})</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Waste Diverted</div>
+                <div class="metric-value">${(selectedData.wasteDiverted / 1000).toFixed(1)} Metric Tons</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Dry Recycled</div>
+                <div class="metric-value">${selectedData.dryRecycled} kg</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Wet Composted</div>
+                <div class="metric-value">${selectedData.wetComposted} kg</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">CO2 Mitigated</div>
+                <div class="metric-value">${(selectedData.co2Saved / 1000).toFixed(1)} Tons</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Active Alerts</div>
+                <div class="metric-value">${selectedData.activeAlerts} Active Cases</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Stewardship Score</div>
+                <div class="metric-value">${selectedData.diligenceScore}%</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Active NGOs</div>
+                <div class="metric-value">${selectedData.activeNGOs} Orgs</div>
+              </div>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const mapSvgRef = useRef<SVGSVGElement>(null);
 
@@ -488,6 +747,97 @@ export const IndiaMap: React.FC = () => {
             )}
           </div>
 
+          {/* Nearby Hubs Geolocation Feature Panel */}
+          <div className="w-full bg-white border-2 border-black p-4 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mb-4 relative z-20 space-y-3 text-left">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">📍</span>
+                <span className="text-xs font-black uppercase tracking-wider text-black">Closest Donation & Recycling Hubs</span>
+              </div>
+              
+              <button
+                onClick={toggleNearbyHubs}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider border-2 border-black flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] active:translate-y-[1px] cursor-pointer transition-all ${
+                  showNearbyHubs 
+                    ? 'bg-[#EF4444] text-white' 
+                    : 'bg-[#FFD700] text-black'
+                }`}
+              >
+                <MapPin className={`h-3.5 w-3.5 ${geoLoading ? 'animate-bounce' : ''}`} />
+                {showNearbyHubs ? 'Hide Nearby Hubs' : 'Locate Closest Hub'}
+              </button>
+            </div>
+
+            {showNearbyHubs && (
+              <div className="text-xs bg-[#FAF8F2] border-2 border-black p-3 rounded-xl space-y-2.5">
+                {geoLoading && (
+                  <div className="flex items-center gap-2 text-zinc-500 font-bold animate-pulse">
+                    <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping" />
+                    <span>Accessing browser Geolocation API...</span>
+                  </div>
+                )}
+
+                {geoError && (
+                  <div className="p-2 bg-amber-55 border border-amber-400 rounded-lg text-[10px] font-bold text-amber-800 leading-relaxed">
+                    ⚠️ {geoError}
+                  </div>
+                )}
+
+                {userCoords && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-[10px] font-black text-zinc-500">
+                      <span>YOUR POSITION:</span>
+                      <span className="font-mono text-zinc-800 bg-zinc-200 border border-black/15 px-1.5 py-0.5 rounded leading-none">
+                        Lat: {userCoords.lat.toFixed(4)}, Lng: {userCoords.lng.toFixed(4)}
+                      </span>
+                    </div>
+
+                    {closestHubId && (() => {
+                      const nearestHub = RECYCLING_HUBS.find(h => h.id === closestHubId);
+                      if (!nearestHub) return null;
+                      const distance = getDistance(userCoords.lat, userCoords.lng, nearestHub.lat, nearestHub.lng);
+                      return (
+                        <div className="border-t border-black/10 pt-2 space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-emerald-400">
+                              Closest Match Found
+                            </span>
+                            <span className="font-mono font-black text-[#7C3AED] text-sm">
+                              {distance} km away
+                            </span>
+                          </div>
+                          
+                          <div>
+                            <h4 className="font-black text-black uppercase leading-tight text-xs">
+                              {nearestHub.name}
+                            </h4>
+                            <p className="text-[10px] text-zinc-500 font-bold mt-1 leading-relaxed">
+                              🏢 Address: {nearestHub.address}
+                            </p>
+                            <p className="text-[10px] text-zinc-500 font-bold leading-relaxed">
+                              📞 Contact: {nearestHub.contact}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              // Auto zoom on the closest hub
+                              setPan({ x: -nearestHub.svgX * 1.5 + 300, y: -nearestHub.svgY * 1.5 + 300 });
+                              setZoom(1.5);
+                            }}
+                            className="w-full mt-1 py-1.5 bg-zinc-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-lg border border-black transition-all"
+                          >
+                            🔎 Center Map on Hub
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Zoom & Pan Controls panel */}
           <div className="absolute top-32 left-8 z-10 flex flex-col gap-1.5 bg-white border-2 border-black p-2 rounded-2xl shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex items-center gap-1 border-b border-zinc-200 pb-1 mb-1 justify-between">
@@ -621,6 +971,118 @@ export const IndiaMap: React.FC = () => {
                     />
                   );
                 })}
+
+                {/* Nearby Geolocation-based Hubs Overlay */}
+                {showNearbyHubs && (
+                  <g>
+                    {/* User coordinates mapping */}
+                    {userCoords && (() => {
+                      const userPos = mapCoordsToSvg(userCoords.lat, userCoords.lng);
+                      return (
+                        <g>
+                          {/* Pulsing indicator of user position */}
+                          <circle cx={userPos.x} cy={userPos.y} r="12" fill="#3B82F6" fillOpacity="0.25" className="animate-ping" />
+                          <circle cx={userPos.x} cy={userPos.y} r="6" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="2" />
+                          <rect x={userPos.x - 30} y={userPos.y - 22} width="60" height="12" rx="3" fill="#3B82F6" stroke="#000" strokeWidth="1" />
+                          <text x={userPos.x} y={userPos.y - 13} fill="#fff" fontSize="7" fontWeight="black" textAnchor="middle">YOU</text>
+
+                          {/* Line to nearest hub */}
+                          {closestHubId && (() => {
+                            const nearestHub = RECYCLING_HUBS.find(h => h.id === closestHubId);
+                            if (nearestHub) {
+                              const dist = getDistance(userCoords.lat, userCoords.lng, nearestHub.lat, nearestHub.lng);
+                              return (
+                                <g>
+                                  <line
+                                    x1={userPos.x}
+                                    y1={userPos.y}
+                                    x2={nearestHub.svgX}
+                                    y2={nearestHub.svgY}
+                                    stroke="#7C3AED"
+                                    strokeWidth="2.5"
+                                    strokeDasharray="4 4"
+                                    className="animate-pulse"
+                                  />
+                                  <rect
+                                    x={(userPos.x + nearestHub.svgX) / 2 - 40}
+                                    y={(userPos.y + nearestHub.svgY) / 2 - 8}
+                                    width="80"
+                                    height="15"
+                                    rx="4"
+                                    fill="#fff"
+                                    stroke="#000"
+                                    strokeWidth="1.5"
+                                  />
+                                  <text
+                                    x={(userPos.x + nearestHub.svgX) / 2}
+                                    y={(userPos.y + nearestHub.svgY) / 2 + 2}
+                                    fill="#000"
+                                    fontSize="8"
+                                    fontWeight="black"
+                                    textAnchor="middle"
+                                  >
+                                    {dist} km away
+                                  </text>
+                                </g>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </g>
+                      );
+                    })()}
+
+                    {/* Active recycling & donation hubs */}
+                    {RECYCLING_HUBS.map((hub) => {
+                      const isClosest = hub.id === closestHubId;
+                      return (
+                        <g key={hub.id} className="cursor-pointer" onClick={() => setSelectedStateId(hub.id === 'h-2' ? 'IN-DL' : hub.id === 'h-1' ? 'IN-KA' : hub.id === 'h-3' ? 'IN-MH' : hub.id === 'h-4' ? 'IN-WB' : hub.id === 'h-5' ? 'IN-TN' : 'IN-TS')}>
+                          {/* Halo ring */}
+                          <circle
+                            cx={hub.svgX}
+                            cy={hub.svgY}
+                            r={isClosest ? "16" : "10"}
+                            fill={isClosest ? "#EF4444" : "#10B981"}
+                            fillOpacity="0.3"
+                            className={isClosest ? "animate-pulse" : ""}
+                          />
+                          {/* Center point */}
+                          <circle
+                            cx={hub.svgX}
+                            cy={hub.svgY}
+                            r={isClosest ? "7" : "5"}
+                            fill={isClosest ? "#EF4444" : "#10B981"}
+                            stroke="#000"
+                            strokeWidth="1.5"
+                          />
+                          {/* Tooltip marker tag */}
+                          <g transform={`translate(${hub.svgX}, ${hub.svgY - 14})`}>
+                            <rect
+                              x="-35"
+                              y="-10"
+                              width="70"
+                              height="12"
+                              rx="3"
+                              fill={isClosest ? "#EF4444" : "#10B981"}
+                              stroke="#000"
+                              strokeWidth="1"
+                            />
+                            <text
+                              x="0"
+                              y="-1.5"
+                              fill="#fff"
+                              fontSize="6.5"
+                              fontWeight="black"
+                              textAnchor="middle"
+                            >
+                              {hub.type === 'Recycling' ? '♻️' : '🎁'} {hub.name.split(' ')[0]}
+                            </text>
+                          </g>
+                        </g>
+                      );
+                    })}
+                  </g>
+                )}
               </g>
             </svg>
 
@@ -771,6 +1233,54 @@ export const IndiaMap: React.FC = () => {
               </p>
             </div>
 
+            {/* INTERACTIVE CONTROLS FOR TRENDS, SNAPSHOTS AND COMPARISON */}
+            <div className="space-y-3 pt-3 border-t-2 border-black">
+              {/* Compare Checkbox */}
+              <label className="flex items-center gap-2 bg-purple-50 border-2 border-black p-2.5 rounded-xl text-xs font-black uppercase cursor-pointer select-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-purple-100 transition-colors">
+                <input 
+                  type="checkbox"
+                  checked={comparedStateIds.includes(selectedStateId)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      if (comparedStateIds.length >= 2) {
+                        setComparedStateIds([comparedStateIds[1], selectedStateId]);
+                      } else {
+                        setComparedStateIds([...comparedStateIds, selectedStateId]);
+                      }
+                    } else {
+                      setComparedStateIds(comparedStateIds.filter(id => id !== selectedStateId));
+                    }
+                  }}
+                  className="h-4.5 w-4.5 border-2 border-black rounded text-[#7C3AED] focus:ring-0 cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5">
+                  <Scale className="h-4 w-4" /> Compare side-by-side
+                </span>
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                {/* 7-Day Trend Button */}
+                <button
+                  onClick={() => setShowTrendModal(true)}
+                  className="px-3 py-2.5 bg-[#7C3AED] hover:bg-indigo-700 text-white border-2 border-black rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                  title="Show 7-day trend chart modal"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  Trend Chart
+                </button>
+
+                {/* Print Snapshot Button */}
+                <button
+                  onClick={triggerSnapshotPrint}
+                  className="px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white border-2 border-black rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer"
+                  title="Print or save current map with state metadata"
+                >
+                  <Download className="h-4 w-4" />
+                  Snapshot
+                </button>
+              </div>
+            </div>
+
           </div>
 
           {/* Map explanation notice card */}
@@ -784,6 +1294,119 @@ export const IndiaMap: React.FC = () => {
         </div>
 
       </div>
+
+      {/* SIDE-BY-SIDE STATE COMPARISON DASHBOARD VIEW */}
+      {comparedStateIds.length > 0 && (
+        <div className="bg-white border-4 border-black rounded-3xl p-4 sm:p-6 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-4">
+          <div className="flex justify-between items-center border-b-2 border-black pb-2">
+            <h3 className="text-md font-black uppercase text-black flex items-center gap-2">
+              <Scale className="h-5 w-5 text-indigo-600" />
+              Regional Impact Metrics Side-by-Side Comparison
+            </h3>
+            <button 
+              onClick={() => setComparedStateIds([])}
+              className="text-xs font-black bg-red-100 text-red-700 hover:bg-red-200 border-2 border-black px-2.5 py-1 rounded-xl cursor-pointer"
+            >
+              Clear Comparison
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {comparedStateIds.map((stateId) => {
+              const sData = STATE_ECO_DATA[stateId];
+              const sName = INDIA_STATES_PATHS.find(s => s.id === stateId)?.name || 'Region';
+              if (!sData) return null;
+              return (
+                <div key={stateId} className="bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-3">
+                  <div className="flex justify-between items-center border-b border-black/10 pb-2">
+                    <h4 className="font-black text-sm uppercase text-black">{sName}</h4>
+                    <span className="bg-black text-white text-[9px] font-black px-2 py-0.5 rounded-md">{stateId}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 text-xs">
+                    <div className="bg-white p-2.5 border border-black rounded-xl">
+                      <span className="text-[8px] font-extrabold text-zinc-400 block uppercase">Waste Diverted</span>
+                      <strong className="text-black font-black font-mono text-xs">{(sData.wasteDiverted / 1000).toFixed(1)} MT</strong>
+                    </div>
+                    <div className="bg-white p-2.5 border border-black rounded-xl">
+                      <span className="text-[8px] font-extrabold text-zinc-400 block uppercase">CO2 Mitigated</span>
+                      <strong className="text-emerald-700 font-black font-mono text-xs">{(sData.co2Saved / 1000).toFixed(1)} Tons</strong>
+                    </div>
+                    <div className="bg-white p-2.5 border border-black rounded-xl">
+                      <span className="text-[8px] font-extrabold text-zinc-400 block uppercase">Stewardship Score</span>
+                      <strong className="text-amber-600 font-black font-mono text-xs">{sData.diligenceScore}%</strong>
+                    </div>
+                    <div className="bg-white p-2.5 border border-black rounded-xl">
+                      <span className="text-[8px] font-extrabold text-zinc-400 block uppercase">Active Alerts</span>
+                      <strong className="text-red-500 font-black font-mono text-xs">{sData.activeAlerts} Cases</strong>
+                    </div>
+                    <div className="bg-white p-2.5 border border-black rounded-xl col-span-2">
+                      <span className="text-[8px] font-extrabold text-zinc-400 block uppercase text-center">Top Recovered Resource Category</span>
+                      <strong className="text-indigo-700 font-black text-center block text-xs mt-0.5">{sData.topCategory}</strong>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {comparedStateIds.length === 1 && (
+              <div className="border-4 border-dashed border-zinc-300 rounded-2xl flex flex-col items-center justify-center p-8 text-center bg-zinc-50">
+                <span className="text-2xl mb-1">👈</span>
+                <p className="text-xs font-black text-zinc-500 uppercase">Select a second state on the map to unlock comparison</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 7-DAY RECHARTS TREND CHART MODAL POPUP */}
+      {showTrendModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-black rounded-3xl p-4 sm:p-6 w-full max-w-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative space-y-4">
+            <button 
+              onClick={() => setShowTrendModal(false)}
+              className="absolute top-4 right-4 h-9 w-9 border-2 border-black rounded-xl bg-white hover:bg-zinc-100 flex items-center justify-center font-black cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            >
+              ✕
+            </button>
+
+            <div>
+              <span className="bg-amber-400 text-black text-[9px] font-black px-2 py-0.5 rounded border border-black uppercase tracking-wider shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                Dynamic Recharts Analytics
+              </span>
+              <h3 className="text-lg font-black uppercase text-black mt-1">
+                7-Day Eco-Stewardship Trend: {INDIA_STATES_PATHS.find(s => s.id === selectedStateId)?.name || ''}
+              </h3>
+              <p className="text-xs font-bold text-zinc-500">
+                Visualizing daily waste recovery volumes (in Metric Tons equivalent) and completed NGO donation packs.
+              </p>
+            </div>
+
+            <div className="h-64 w-full bg-[#FAF8F2] border-2 border-black rounded-2xl p-2 sm:p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={getTrendData(selectedStateId)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+                  <XAxis dataKey="day" stroke="#000" style={{ fontSize: 10, fontWeight: 'bold' }} />
+                  <YAxis stroke="#000" style={{ fontSize: 10, fontWeight: 'bold' }} />
+                  <RechartsTooltip contentStyle={{ backgroundColor: '#fff', border: '2px solid #000', borderRadius: '8px', fontSize: 11, fontWeight: 'bold' }} />
+                  <RechartsLegend wrapperStyle={{ fontSize: 10, fontWeight: 'bold' }} />
+                  <Line type="monotone" dataKey="waste" name="Waste Diverted (MT)" stroke="#7C3AED" strokeWidth={3} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="donations" name="Donation Packs" stroke="#10B981" strokeWidth={3} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowTrendModal(false)}
+                className="px-4 py-2 bg-black hover:bg-zinc-850 text-white border-2 border-black rounded-xl text-xs font-black uppercase cursor-pointer"
+              >
+                Close Trend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

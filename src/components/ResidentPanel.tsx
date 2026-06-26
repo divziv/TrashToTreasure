@@ -17,7 +17,8 @@ import {
   ShieldCheck,
   Download,
   Volume2,
-  VolumeX
+  VolumeX,
+  Camera
 } from 'lucide-react';
 import { 
   Portal, 
@@ -59,6 +60,146 @@ export default function ResidentPanel({
   // Resident floor filter
   const [residentFloor, setResidentFloor] = useState<number>(1);
 
+  // Scheduling Pickups States
+  const [pickupDate, setPickupDate] = useState<string>(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  });
+  const [pickupTimeSlot, setPickupTimeSlot] = useState<string>('11:00 AM - 01:00 PM');
+  const [scheduledPickups, setScheduledPickups] = useState<Array<{id: string, date: string, timeSlot: string, itemType: string, status: 'awaiting' | 'assigned' | 'completed'}>>([
+    { id: 'p-1', date: '25 Jun 2026', timeSlot: '09:00 AM - 11:00 AM', itemType: 'Textbooks', status: 'completed' },
+    { id: 'p-2', date: '28 Jun 2026', timeSlot: '04:00 PM - 06:00 PM', itemType: 'Woolen Sweaters', status: 'assigned' }
+  ]);
+
+  // Gemini Chatbot States
+  const [chatInput, setChatInput] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', text: string}>>([
+    { role: 'assistant', text: 'Hello! I am your AI Recycling Guide. Ask me any question about sorting categories, bin policies, or donation suitability guidelines.' }
+  ]);
+  const [chatLoading, setChatLoading] = useState<boolean>(false);
+
+  // Personalized Eco-Tips States
+  const [ecoCategory, setEcoCategory] = useState<string>('Composting');
+  const [ecoTip, setEcoTip] = useState<string>('Add dry garden leaves or cardboard scraps above kitchen organic waste to eliminate fruit flies and balance nitrogen levels.');
+  const [ecoTipLoading, setEcoTipLoading] = useState<boolean>(false);
+
+  // Sustainability Streak States
+  const [ecoStreak, setEcoStreak] = useState<number>(8);
+  const [hasLoggedToday, setHasLoggedToday] = useState<boolean>(false);
+
+  const handleIncrementStreak = () => {
+    if (hasLoggedToday) return;
+    setEcoStreak(prev => prev + 1);
+    setHasLoggedToday(true);
+    triggerParticles();
+    alert("Incredible! Eco-Activity logged. Streak increased to " + (ecoStreak + 1) + " days! 🌱🔥");
+  };
+
+  // Local caching (IndexedDB/LocalStorage Simulation)
+  const [cachedNotifs, setCachedNotifs] = useState<FlatAlertNotification[]>([]);
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
+
+  // Synchronize notifications to local cache (simulated IndexedDB storage offline safety)
+  React.useEffect(() => {
+    if (notifications && notifications.length > 0) {
+      localStorage.setItem(`cached-notifs-${currentPortal.id}`, JSON.stringify(notifications));
+      setCachedNotifs(notifications);
+    } else {
+      const saved = localStorage.getItem(`cached-notifs-${currentPortal.id}`);
+      if (saved) {
+        setCachedNotifs(JSON.parse(saved));
+        setIsOfflineMode(true);
+      }
+    }
+  }, [notifications, currentPortal.id]);
+
+  // Fetch Personalized Eco Tip from backend
+  const fetchEcoTip = async (categoryName: string) => {
+    try {
+      setEcoTipLoading(true);
+      const res = await fetch('/api/ai/daily-tip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: categoryName })
+      });
+      const data = await res.json();
+      if (data.tip) {
+        setEcoTip(data.tip);
+      }
+    } catch {
+      // safe fallback tip
+      setEcoTip('Avoid storing plastic wrappers with general paper scrap; separate them to facilitate processing.');
+    } finally {
+      setEcoTipLoading(false);
+    }
+  };
+
+  // Submit chat query to Gemini helper
+  const handleSendChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg })
+      });
+      const data = await res.json();
+      if (data.reply) {
+        setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
+      }
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', text: 'I am temporarily offline. Please ensure dry materials go in the blue bins and wet organics go in the green bins!' }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // Handle scheduling pickup action
+  const handleSchedulePickup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pickupDate) return;
+    const newPickup = {
+      id: `p-${Date.now()}`,
+      date: new Date(pickupDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      timeSlot: pickupTimeSlot,
+      itemType: donTitle || 'Unspecified Goods',
+      status: 'awaiting' as const
+    };
+    setScheduledPickups(prev => [newPickup, ...prev]);
+    triggerParticles();
+    alert("Donation Pickup scheduled! Local NGO will confirm assignment.");
+  };
+
+  // Export Donation list as CSV locally
+  const exportDonationLedgerToCSV = () => {
+    const headers = ['Receipt ID', 'Date', 'Item Description', 'Category', 'Carbon Mitigated (kg)', 'Points Gained'];
+    const rows = ledger.map(item => [
+      item.id,
+      item.date,
+      `"${item.title.replace(/"/g, '""')}"`,
+      item.category,
+      item.co2SavedKg,
+      item.pointsEarned
+    ]);
+    
+    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', `Swachh_Bharat_My_Donations_Log_${loggedInUser?.name || 'Resident'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Complaint form states
   const [compTitle, setCompTitle] = useState('');
   const [compCat, setCompCat] = useState<'delay' | 'missed' | 'spilt' | 'sorting_issue' | 'others'>('delay');
@@ -72,6 +213,87 @@ export default function ResidentPanel({
   const [donDesc, setDonDesc] = useState('');
   const [donContact, setDonContact] = useState('');
   const [submittingDon, setSubmittingDon] = useState(false);
+
+  // AI Waste Material Scanner States
+  const [wasteImageBase64, setWasteImageBase64] = useState<string>('');
+  const [wasteMimeType, setWasteMimeType] = useState<string>('');
+  const [isScanningWaste, setIsScanningWaste] = useState<boolean>(false);
+  const [scannedResult, setScannedResult] = useState<{
+    category: string;
+    recyclability: string;
+    instructions: string;
+    estimatedWeight: string;
+    carbonOffset: string;
+  } | null>(null);
+  const [scannerError, setScannerError] = useState<string>('');
+
+  const handleWastePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScannerError('');
+    setScannedResult(null);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setWasteImageBase64(reader.result as string);
+      setWasteMimeType(file.type);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const runWasteImageAnalysis = async (customBase64?: string, customMime?: string) => {
+    const finalBase64 = customBase64 || wasteImageBase64;
+    const finalMime = customMime || wasteMimeType;
+
+    if (!finalBase64) {
+      setScannerError('Please capture or upload an image first.');
+      return;
+    }
+
+    setIsScanningWaste(true);
+    setScannerError('');
+    setScannedResult(null);
+
+    // Strip header if present
+    const cleanBase64 = finalBase64.includes('base64,') 
+      ? finalBase64.split('base64,')[1] 
+      : finalBase64;
+
+    try {
+      const response = await fetch('/api/ai/analyze-waste', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          base64Data: cleanBase64,
+          mimeType: finalMime || 'image/jpeg'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Server returned ' + response.status);
+      }
+
+      const data = await response.json();
+      setScannedResult(data);
+      triggerParticles();
+    } catch (err: any) {
+      console.error('Error analyzing waste image:', err);
+      setScannerError('Could not analyze item. Using smart local fallback.');
+      
+      // Smart offline fallback
+      setScannedResult({
+        category: "Dry Household Recyclables",
+        recyclability: "80% Recyclable Yield",
+        instructions: "Rinse completely, separate metal or plastic caps, and place in the dry blue sorting vault.",
+        estimatedWeight: "0.4 Kg",
+        carbonOffset: "0.2 Kg CO2e"
+      });
+    } finally {
+      setIsScanningWaste(false);
+    }
+  };
 
   // Particle and Voice state declarations
   const [particles, setParticles] = useState<{ id: number; dx: number; dy: number; size: number; color: string }[]>([]);
@@ -138,11 +360,41 @@ export default function ResidentPanel({
   const [aiAuditing, setAiAuditing] = useState(false);
   const [aiAuditResult, setAiAuditResult] = useState<any>(null);
 
+  // Notification Filters
+  const [severityFilter, setSeverityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'maintenance' | 'community' | 'donation' | 'other'>('all');
+
+  const getNotificationCategory = (notif: FlatAlertNotification): 'maintenance' | 'community' | 'donation' | 'other' => {
+    const text = (notif.title + ' ' + notif.body).toLowerCase();
+    if (text.includes('clean') || text.includes('spill') || text.includes('maintenance') || text.includes('refuse') || text.includes('bin') || text.includes('floor') || text.includes('sweeper')) {
+      return 'maintenance';
+    }
+    if (text.includes('community') || text.includes('announcement') || text.includes('campaign') || text.includes('meeting') || text.includes('notice') || text.includes('celebration')) {
+      return 'community';
+    }
+    if (text.includes('donation') || text.includes('hub') || text.includes('gift') || text.includes('charity') || text.includes('ngo') || text.includes('drop')) {
+      return 'donation';
+    }
+    return 'other';
+  };
+
   // Compile active notices relevant to resident's selected floor
   const activeNotifs = notifications.filter(notif => {
     if (notif.portalId !== currentPortal.id) return false;
     // Broadcast notices have floor = -1
-    return notif.floor === -1 || notif.floor === residentFloor;
+    const floorMatch = notif.floor === -1 || notif.floor === residentFloor;
+    if (!floorMatch) return false;
+
+    // Severity filter match
+    if (severityFilter !== 'all' && notif.severity !== severityFilter) return false;
+
+    // Category filter match
+    if (categoryFilter !== 'all') {
+      const notifCat = getNotificationCategory(notif);
+      if (notifCat !== categoryFilter) return false;
+    }
+
+    return true;
   });
 
   const handleSubmitComplaint = async (e: React.FormEvent) => {
@@ -627,6 +879,69 @@ export default function ResidentPanel({
                   </div>
                 </div>
               </div>
+
+              {/* 🌿 Sustainability Streak Card */}
+              <div className="bg-[#FAF8F2] border-2 border-black p-3.5 rounded-2xl shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] space-y-2 relative overflow-hidden text-left">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-md">🔥</span>
+                    <h4 className="text-[11px] font-black uppercase text-black">Eco-Sustainability Streak</h4>
+                  </div>
+                  <span className="bg-orange-100 text-orange-800 border border-orange-400 text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="animate-pulse">🔴</span> LIVE STREAK
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3.5 bg-white border border-black p-2.5 rounded-xl">
+                  <div className="relative h-12 w-12 bg-orange-100 border-2 border-orange-500 rounded-full flex items-center justify-center text-xl shadow-inner shrink-0">
+                    {ecoStreak >= 10 ? '🌸' : ecoStreak >= 5 ? '☘️' : ecoStreak >= 1 ? '🌿' : '🌱'}
+                    {/* Burning flame icon overlays */}
+                    <span className="absolute bottom-[-4px] right-[-4px] bg-white border border-black rounded-full p-0.5 text-[10px] leading-none">
+                      🔥
+                    </span>
+                  </div>
+
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl font-black font-mono text-orange-600">{ecoStreak}</span>
+                      <span className="text-[10px] font-black text-zinc-500 uppercase">Consecutive Days</span>
+                    </div>
+                    <p className="text-[9px] font-bold text-zinc-400 leading-tight">
+                      {ecoStreak >= 10 ? "Flourishing Eco-Legend status! Keep up the incredible daily resource recovery!" :
+                       ecoStreak >= 5 ? "Healthy sapling stage! You are building deep, resilient environmental habits." :
+                       "Keep sorting and recycling daily to see your tree grow!"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Growth Stages bar representation */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[8px] font-extrabold text-zinc-400 uppercase leading-none">
+                    <span>🌱 Seed</span>
+                    <span>🌿 Sprout</span>
+                    <span>☘️ Sapling</span>
+                    <span>🌸 Tree</span>
+                  </div>
+                  <div className="w-full bg-zinc-200 border border-black h-2.5 rounded-full overflow-hidden p-0.5 flex gap-0.5">
+                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 1 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
+                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 3 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
+                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 5 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
+                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 10 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleIncrementStreak}
+                  disabled={hasLoggedToday}
+                  className={`w-full py-1.5 border border-black rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                    hasLoggedToday 
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed' 
+                      : 'bg-[#FFD700] hover:bg-amber-400 text-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
+                  }`}
+                >
+                  {hasLoggedToday ? '✓ Activity Logged for Today' : '⚡ Log Daily Eco-Activity'}
+                </button>
+              </div>
             </div>
 
             {/* Badges Earned Section */}
@@ -696,6 +1011,84 @@ export default function ResidentPanel({
               </div>
             </div>
 
+            {/* INTERACTIVE FLOOR-BY-FLOOR CLEANLINESS HEATMAP TOWER */}
+            <div className="border-2 border-black p-4 rounded-2xl bg-zinc-50 space-y-3">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <div>
+                  <h4 className="text-xs font-black uppercase text-black flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-emerald-600 animate-pulse" />
+                    Greenwood Complex Cleanliness Heatmap
+                  </h4>
+                  <p className="text-[10px] font-bold text-zinc-500">Interactive elevation chart showing live waste density and unresolved citizen reports per floor.</p>
+                </div>
+                <div className="flex items-center gap-3 text-[9px] font-black uppercase">
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> 0 Alerts (Clean)</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400"></span> 1 Alert (Medium)</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500"></span> 2+ Alerts (Heavy)</span>
+                </div>
+              </div>
+
+              {/* Heatmap Highrise Blocks */}
+              <div className="flex flex-col-reverse divide-y divide-y-reverse divide-black/10 border-2 border-black rounded-xl overflow-hidden bg-white">
+                {Array.from({ length: currentPortal.floorsCount }, (_, i) => i + 1).map(f => {
+                  // Count total alerts or notices for this floor dynamically
+                  const floorNotifsCount = notifications.filter(n => n.portalId === currentPortal.id && n.floor === f).length;
+                  const isSelected = residentFloor === f;
+
+                  let bgClass = 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900';
+                  let statusText = '🟢 Excellent Cleanliness';
+                  if (floorNotifsCount === 1) {
+                    bgClass = 'bg-amber-50 hover:bg-amber-100 text-amber-950';
+                    statusText = '🟡 Pending Collection';
+                  } else if (floorNotifsCount >= 2) {
+                    bgClass = 'bg-red-50 hover:bg-red-100 text-red-950';
+                    statusText = '🔴 Heavy Waste Accumulation';
+                  }
+
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setResidentFloor(f)}
+                      className={`w-full p-3.5 flex flex-col sm:flex-row sm:items-center justify-between text-left transition-all relative outline-none cursor-pointer ${bgClass} ${
+                        isSelected ? 'ring-4 ring-inset ring-[#FFD700] border-y-2 border-black font-black z-10' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="h-5 w-5 bg-black text-white text-[10px] font-bold flex items-center justify-center rounded-md">
+                          F{f}
+                        </span>
+                        <span className="text-xs font-black uppercase">Level {f} Floorplate</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-1 sm:mt-0 text-[11px]">
+                        <span className="font-bold uppercase text-[9px] px-2 py-0.5 rounded-full border border-black/10 bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.1)]">
+                          {statusText}
+                        </span>
+                        <span className="font-mono font-bold text-[10px]">
+                          {floorNotifsCount} Active {floorNotifsCount === 1 ? 'Notice' : 'Notices'}
+                        </span>
+                      </div>
+
+                      {isSelected && (
+                        <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#FFD700]"></span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Offline Cache Indicator Notice */}
+            {isOfflineMode && (
+              <div className="bg-amber-50 border-2 border-black p-3 rounded-xl flex items-center gap-2.5 text-xs text-amber-900 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span>⚠️</span>
+                <div>
+                  <strong className="uppercase font-black text-black block text-[10px]">Indexed Caching Active (Offline View)</strong>
+                  <span>Displaying local offline cached reports. Your connection seems temporarily interrupted.</span>
+                </div>
+              </div>
+            )}
+
             {/* List of alerts */}
             <div className="space-y-4 pt-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-black/10 pb-2">
@@ -720,6 +1113,53 @@ export default function ResidentPanel({
                     </>
                   )}
                 </button>
+              </div>
+
+              {/* Filter controls */}
+              <div className="bg-zinc-50 border-2 border-black p-3 rounded-2xl flex flex-wrap gap-4 items-center justify-between text-xs">
+                <div className="flex flex-wrap items-center gap-3.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold uppercase text-[10px] text-zinc-500">Severity:</span>
+                    <div className="flex gap-1 bg-white p-1 border border-black rounded-lg">
+                      {(['all', 'high', 'medium', 'low'] as const).map((sev) => (
+                        <button
+                          key={sev}
+                          onClick={() => setSeverityFilter(sev)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border border-transparent cursor-pointer transition-colors ${
+                            severityFilter === sev
+                              ? 'bg-black text-white'
+                              : 'hover:bg-zinc-100 text-zinc-600'
+                          }`}
+                        >
+                          {sev}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold uppercase text-[10px] text-zinc-500">Category:</span>
+                    <div className="flex gap-1 bg-white p-1 border border-black rounded-lg">
+                      {(['all', 'maintenance', 'community', 'donation', 'other'] as const).map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => setCategoryFilter(cat)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border border-transparent cursor-pointer transition-colors ${
+                            categoryFilter === cat
+                              ? 'bg-[#7C3AED] text-white'
+                              : 'hover:bg-zinc-100 text-zinc-600'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-black text-zinc-400 uppercase tracking-wide bg-white border border-black/10 px-2 py-1 rounded">
+                  Showing {activeNotifs.length} reports
+                </div>
               </div>
 
               {activeNotifs.length === 0 ? (
@@ -855,133 +1295,486 @@ export default function ResidentPanel({
       {activeTab === 'donate' && (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           
-          <div className="md:col-span-5 bg-white vibrant-border p-5 rounded-3xl vibrant-shadow-sm space-y-4">
-            <div className="flex items-center gap-1.5 text-[#7C3AED]">
-              <Gift className="h-5 w-5" />
-              <h3 className="text-lg font-black uppercase text-black">Add Donation Offer</h3>
-            </div>
-            <p className="text-xs font-bold text-zinc-500">Offer your surplus clothes, surplus home-cooked food packets, or old textbooks directly to verified shelter NGOs.</p>
-
-            <form onSubmit={handleSubmitDonation} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Title</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Hardbound HC Verma Physics textbooks (3 books)"
-                  value={donTitle}
-                  onChange={(e) => setDonTitle(e.target.value)}
-                  required
-                  className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
-                />
+          <div className="md:col-span-5 space-y-6">
+            <div className="bg-white vibrant-border p-5 rounded-3xl vibrant-shadow-sm space-y-4">
+              <div className="flex items-center gap-1.5 text-[#7C3AED]">
+                <Gift className="h-5 w-5" />
+                <h3 className="text-lg font-black uppercase text-black">Add Donation Offer</h3>
               </div>
+              <p className="text-xs font-bold text-zinc-500">Offer your surplus clothes, surplus home-cooked food packets, or old textbooks directly to verified shelter NGOs.</p>
 
-              <div className="grid grid-cols-2 gap-2">
+              <form onSubmit={handleSubmitDonation} className="space-y-4">
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Category</label>
-                  <select
-                    value={donCat}
-                    onChange={(e: any) => setDonCat(e.target.value)}
-                    className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-[#7C3AED] font-black focus:outline-none cursor-pointer"
-                  >
-                    <option value="clothes">Clothes & Blankets</option>
-                    <option value="food">Grains / Food Packets</option>
-                    <option value="books">Textbooks & Novels</option>
-                    <option value="others">Household Commodities</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Quantity</label>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Title</label>
                   <input 
                     type="text" 
-                    placeholder="e.g. 1 Medium Box"
-                    value={donQty}
-                    onChange={(e) => setDonQty(e.target.value)}
+                    placeholder="e.g. Hardbound HC Verma Physics textbooks (3 books)"
+                    value={donTitle}
+                    onChange={(e) => setDonTitle(e.target.value)}
                     required
                     className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Specifications & Condition</label>
-                <textarea 
-                  placeholder="Detail condition. E.g. Washed completely. Inside pages fully intact, dry. Suitable for kids age 10-15."
-                  rows={3}
-                  value={donDesc}
-                  onChange={(e) => setDonDesc(e.target.value)}
-                  required
-                  className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Category</label>
+                    <select
+                      value={donCat}
+                      onChange={(e: any) => setDonCat(e.target.value)}
+                      className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-[#7C3AED] font-black focus:outline-none cursor-pointer"
+                    >
+                      <option value="clothes">Clothes & Blankets</option>
+                      <option value="food">Grains / Food Packets</option>
+                      <option value="books">Textbooks & Novels</option>
+                      <option value="others">Household Commodities</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Quantity</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 1 Medium Box"
+                      value={donQty}
+                      onChange={(e) => setDonQty(e.target.value)}
+                      required
+                      className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Your Mobile Contact (kept secure for NGOs)</label>
-                <input 
-                  type="tel" 
-                  placeholder="e.g. +91 9435X XXXX"
-                  value={donContact}
-                  onChange={(e) => setDonContact(e.target.value)}
-                  className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
-                />
-              </div>
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Item Specifications & Condition</label>
+                  <textarea 
+                    placeholder="Detail condition. E.g. Washed completely. Inside pages fully intact, dry. Suitable for kids age 10-15."
+                    rows={3}
+                    value={donDesc}
+                    onChange={(e) => setDonDesc(e.target.value)}
+                    required
+                    className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
+                  />
+                </div>
 
-              {/* AI Audit button */}
-              <div className="flex gap-2">
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-[#7C3AED] mb-1">Your Mobile Contact (kept secure for NGOs)</label>
+                  <input 
+                    type="tel" 
+                    placeholder="e.g. +91 9435X XXXX"
+                    value={donContact}
+                    onChange={(e) => setDonContact(e.target.value)}
+                    className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white"
+                  />
+                </div>
+
+                {/* AI Audit button */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={runAiDonationAudit}
+                    disabled={aiAuditing || !donTitle}
+                    className="flex-1 border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-black py-3 px-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                  >
+                    {aiAuditing ? <Loader2 className="h-3 w-3 animate-spin text-black" /> : <Sparkles className="h-4 w-4 text-white p-0.5 rounded bg-black border border-black" />}
+                    Check Quality via Gemini AI
+                  </button>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={runAiDonationAudit}
-                  disabled={aiAuditing || !donTitle}
-                  className="flex-1 border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-black py-3 px-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                  type="submit"
+                  disabled={submittingDon}
+                  className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-all border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5"
                 >
-                  {aiAuditing ? <Loader2 className="h-3 w-3 animate-spin text-black" /> : <Sparkles className="h-4 w-4 text-white p-0.5 rounded bg-black border border-black" />}
-                  Check Quality via Gemini AI
+                  {submittingDon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Publish Donation Package
                 </button>
+              </form>
+            </div>
+
+            {/* AI-Powered Image Analysis / Waste Material Scanner Tool */}
+            <div className="bg-white border-4 border-black p-5 rounded-3xl shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-4">
+              <div className="flex items-center gap-1.5 text-emerald-600">
+                <Sparkles className="h-5 w-5 text-emerald-600 animate-spin" />
+                <h3 className="text-lg font-black uppercase text-black">AI Waste Categorizer</h3>
+              </div>
+              <p className="text-xs font-bold text-zinc-500">
+                Upload a photo or select a quick household waste item to find its correct recycling/disposal bin instantly using Gemini AI.
+              </p>
+
+              {/* Quick Preset Buttons */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-black uppercase text-zinc-400 block">Quick Simulation Presets:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { name: 'Soda Can', icon: '🥤', text: 'An empty aluminum Coca-cola soda can. Slightly crushed.' },
+                    { name: 'Apple Core', icon: '🍎', text: 'Discarded organic apple fruit scraps and core.' },
+                    { name: 'AA Battery', icon: '🔋', text: 'A depleted zinc alkaline battery, double A model.' }
+                  ].map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setWasteImageBase64('PRESET_ACTIVE');
+                        setWasteMimeType('image/png');
+                        runWasteImageAnalysis('PRESET_ACTIVE', 'image/png');
+                      }}
+                      className="flex flex-col items-center justify-center p-2 rounded-xl border border-black bg-zinc-50 hover:bg-[#FFD700]/20 text-[10px] font-black uppercase cursor-pointer transition-colors"
+                    >
+                      <span className="text-lg">{item.icon}</span>
+                      <span className="truncate w-full text-center">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={submittingDon}
-                className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-all border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5"
-              >
-                {submittingDon ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Publish Donation Package
-              </button>
-            </form>
+              {/* Upload/Drop Zone */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-emerald-600">Or Upload Material Image</label>
+                <div className="relative border-2 border-dashed border-black rounded-xl p-4 bg-[#FAF8F2] hover:bg-zinc-50 transition-colors flex flex-col items-center justify-center text-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleWastePhotoUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <Camera className="h-6 w-6 text-zinc-500 mb-1" />
+                  <span className="text-[10px] font-black uppercase text-black">Choose file or capture photo</span>
+                  <span className="text-[8px] font-bold text-zinc-400 mt-0.5">Supports PNG, JPG (Max 5MB)</span>
+                </div>
+              </div>
+
+              {/* Selected file info / action */}
+              {wasteImageBase64 && (
+                <div className="p-3 bg-zinc-50 border border-black rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 font-bold truncate">
+                    <span>📸</span>
+                    <span className="truncate">
+                      {wasteImageBase64 === 'PRESET_ACTIVE' ? 'Simulating Selected Preset' : 'Captured/Selected Image'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => runWasteImageAnalysis()}
+                    disabled={isScanningWaste}
+                    className="bg-[#10B981] hover:bg-emerald-600 text-white px-3 py-1 rounded-lg font-black uppercase text-[10px] border border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                  >
+                    {isScanningWaste ? 'Scanning...' : 'Scan Item'}
+                  </button>
+                </div>
+              )}
+
+              {/* Analysis Result Display */}
+              {isScanningWaste && (
+                <div className="p-4 bg-emerald-50 border border-emerald-500 rounded-xl space-y-2 text-center animate-pulse">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto text-emerald-600" />
+                  <p className="text-[11px] font-black uppercase text-emerald-800">Gemini material scanner analyzing molecular composition...</p>
+                </div>
+              )}
+
+              {scannerError && (
+                <div className="p-3 bg-red-100 text-red-700 text-[10px] font-bold rounded-lg">
+                  ⚠️ {scannerError}
+                </div>
+              )}
+
+              {scannedResult && (
+                <div className="p-4 bg-emerald-50 border-2 border-emerald-600 rounded-2xl space-y-3.5 text-left relative overflow-hidden">
+                  <div className="absolute top-0 right-0 bg-emerald-600 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-bl">
+                    VERIFIED BIN CATEGORY
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] text-emerald-800 font-extrabold uppercase block tracking-wide">Target Category:</span>
+                    <div className="text-md font-black text-black uppercase flex items-center gap-1.5 mt-0.5">
+                      {scannedResult.category.toLowerCase().includes('organic') ? '🟢 ' :
+                       scannedResult.category.toLowerCase().includes('electronic') ? '🔴 ' :
+                       scannedResult.category.toLowerCase().includes('hazard') ? '💀 ' : '🔵 '}
+                      {scannedResult.category}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white border border-zinc-200 p-2 rounded-xl">
+                      <span className="text-[8px] text-zinc-500 font-bold uppercase block">Recyclability:</span>
+                      <span className="font-black text-emerald-700 text-[11px]">{scannedResult.recyclability}</span>
+                    </div>
+                    <div className="bg-white border border-zinc-200 p-2 rounded-xl">
+                      <span className="text-[8px] text-zinc-500 font-bold uppercase block">Est. Weight & Offset:</span>
+                      <span className="font-black text-zinc-800 text-[10px]">{scannedResult.estimatedWeight} ({scannedResult.carbonOffset})</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-zinc-200 p-2.5 rounded-xl space-y-0.5">
+                    <span className="text-[8px] text-zinc-500 font-black uppercase tracking-wide block">Disposal Action Instructions:</span>
+                    <p className="text-[10px] font-bold text-zinc-700 leading-normal">{scannedResult.instructions}</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="md:col-span-7 bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="text-sm font-black text-black uppercase tracking-widest bg-[#FFD700] border-2 border-black px-2.5 py-1 rounded-lg inline-block shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4" />
-              Gemini Automated Pre-Audit Reports
-            </h3>
-            <p className="text-xs font-bold text-zinc-500">Our smart model inspects description keywords to predict sanitary levels and tags before physical NGO capture.</p>
+          <div className="md:col-span-7 space-y-6">
+            
+            {/* 1. Gemini Automated Pre-Audit Reports */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <h3 className="text-sm font-black text-black uppercase tracking-widest bg-[#FFD700] border-2 border-black px-2.5 py-1 rounded-lg inline-block shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-amber-600 animate-spin" />
+                Gemini Automated Pre-Audit Reports
+              </h3>
+              <p className="text-xs font-bold text-zinc-500">Our smart model inspects description keywords to predict sanitary levels and tags before physical NGO capture.</p>
 
-            {aiAuditResult ? (
-              <div className="p-4 bg-[#FAF8F2] border-2 border-black rounded-2xl space-y-3.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-black text-xs font-bold">
-                  <span className="text-zinc-500 uppercase tracking-wide text-[10px]">Usability Rating:</span>
-                  <span className="text-xs font-black text-[#7C3AED]">{aiAuditResult.usability}</span>
+              {aiAuditResult ? (
+                <div className="p-4 bg-[#FAF8F2] border-2 border-black rounded-2xl space-y-3.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-black text-xs font-bold">
+                    <span className="text-zinc-500 uppercase tracking-wide text-[10px]">Usability Rating:</span>
+                    <span className="text-xs font-black text-[#7C3AED]">{aiAuditResult.usability}</span>
+                  </div>
+                  <div className="text-xs text-black font-extrabold leading-relaxed">
+                    <strong className="text-[10px] text-zinc-500 uppercase block tracking-wide mb-0.5">Recommended Target Groups:</strong>
+                    <span className="bg-white border border-zinc-350 p-2.5 rounded-lg block font-bold mt-1">{aiAuditResult.recommendedGroup}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wide block font-extrabold">Audit Verification Tags:</span>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {aiAuditResult.sanitizedTags.map((tag: string, idx: number) => (
+                        <span key={idx} className="bg-[#FFD700] text-[10px] text-black font-black uppercase px-2.5 py-1 rounded border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-black font-extrabold leading-relaxed">
-                  <strong className="text-[10px] text-zinc-500 uppercase block tracking-wide mb-0.5">Recommended Target Groups:</strong>
-                  <span className="bg-white border border-zinc-350 p-2.5 rounded-lg block font-bold mt-1">{aiAuditResult.recommendedGroup}</span>
+              ) : (
+                <div className="py-12 text-center border-4 border-dashed border-zinc-300 rounded-3xl text-zinc-500 font-black text-xs uppercase bg-[#FAF8F2]">
+                  Awaiting items entry form on left. Fill specifications and hit "Check Quality" to run model validation.
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wide block font-extrabold">Audit Verification Tags:</span>
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {aiAuditResult.sanitizedTags.map((tag: string, idx: number) => (
-                      <span key={idx} className="bg-[#FFD700] text-[10px] text-black font-black uppercase px-2.5 py-1 rounded border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                        #{tag}
-                      </span>
-                    ))}
+              )}
+            </div>
+
+            {/* 2. Community Milestones Progress */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <h3 className="text-xs font-black text-black uppercase tracking-widest bg-emerald-100 border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <Award className="h-4 w-4 text-emerald-600" />
+                  Community Milestones Progress
+                </h3>
+                <span className="text-[10px] font-mono font-black text-zinc-650">GREENWOOD ANNUAL GOAL</span>
+              </div>
+              <p className="text-xs font-bold text-zinc-500">Track aggregate neighborhood participation toward meeting global emission-reduction milestones.</p>
+
+              <div className="space-y-4 bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl">
+                {/* Milestone 1 */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs font-black">
+                    <span className="uppercase text-black">🌲 Landfill Diversion Rate</span>
+                    <span className="font-mono text-emerald-700">76% (Target: 85%)</span>
+                  </div>
+                  <div className="w-full bg-zinc-200 border-2 border-black h-4 rounded-full overflow-hidden p-0.5">
+                    <div className="bg-emerald-500 h-full rounded-full transition-all border-r border-black" style={{ width: '76%' }}></div>
+                  </div>
+                </div>
+
+                {/* Milestone 2 */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs font-black">
+                    <span className="uppercase text-black">♻️ Community Composting Yield</span>
+                    <span className="font-mono text-emerald-700">2,450 Kg (Target: 3,000 Kg)</span>
+                  </div>
+                  <div className="w-full bg-zinc-200 border-2 border-black h-4 rounded-full overflow-hidden p-0.5">
+                    <div className="bg-emerald-500 h-full rounded-full transition-all border-r border-black" style={{ width: '81%' }}></div>
+                  </div>
+                </div>
+
+                {/* Celebratory Badge collection */}
+                <div className="pt-2 border-t border-black/10">
+                  <span className="text-[10px] font-black uppercase text-zinc-500 block mb-2">Unlocked Community Badges:</span>
+                  <div className="flex gap-2 flex-wrap">
+                    <span className="px-2.5 py-1 rounded bg-emerald-100 border-2 border-black text-[10px] font-black uppercase flex items-center gap-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                      🌿 CO2 Mitigators
+                    </span>
+                    <span className="px-2.5 py-1 rounded bg-emerald-100 border-2 border-black text-[10px] font-black uppercase flex items-center gap-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                      🍎 Food Angels
+                    </span>
+                    <span className="px-2.5 py-1 rounded bg-zinc-100 border-2 border-dashed border-zinc-400 text-[10px] font-black uppercase text-zinc-400 flex items-center gap-1">
+                      🔒 Zero-Waste Pioneer (85% Needed)
+                    </span>
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="py-24 text-center border-4 border-dashed border-zinc-300 rounded-3xl text-zinc-500 font-black text-xs uppercase bg-[#FAF8F2]">
-                Awaiting items entry form above. Fill specifications and hit "Check Quality" to run model validation.
+            </div>
+
+            {/* 3. Personalized Daily Eco-Tips Section */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex justify-between items-center flex-wrap gap-2">
+                <h3 className="text-xs font-black text-black uppercase tracking-widest bg-amber-100 border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <Leaf className="h-4 w-4 text-emerald-600" />
+                  Personalized Daily Eco-Tips
+                </h3>
+                <span className="text-[9px] bg-black text-white px-2 py-0.5 rounded uppercase font-black">AI Generated</span>
               </div>
-            )}
+              <p className="text-xs font-bold text-zinc-500">Pick a focus category to generate action-oriented household waste-minimization methods.</p>
+
+              <div className="flex gap-2 flex-wrap items-center">
+                <select
+                  value={ecoCategory}
+                  onChange={(e) => {
+                    setEcoCategory(e.target.value);
+                    fetchEcoTip(e.target.value);
+                  }}
+                  className="bg-white text-xs font-black uppercase border-2 border-black p-2.5 rounded-xl cursor-pointer outline-none flex-1"
+                >
+                  <option value="Composting">☘️ Composting & Kitchen Scraps</option>
+                  <option value="Electronics">🔌 E-Waste & Chargers</option>
+                  <option value="Textiles">👕 Textiles & Old Clothes</option>
+                  <option value="Plastics">🧴 Single-Use Plastics</option>
+                  <option value="General">🌐 Universal Cleanliness</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => fetchEcoTip(ecoCategory)}
+                  disabled={ecoTipLoading}
+                  className="bg-zinc-900 hover:bg-black text-white text-xs font-black uppercase p-3 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer disabled:opacity-50"
+                >
+                  {ecoTipLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Refresh Tip'}
+                </button>
+              </div>
+
+              <div className="p-4 bg-[#FAF8F2] border-2 border-black rounded-2xl flex items-start gap-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="text-xl">💡</span>
+                <p className="text-xs text-zinc-800 leading-relaxed font-bold italic">
+                  "{ecoTip}"
+                </p>
+              </div>
+            </div>
+
+            {/* 4. AI-Powered Conversational Assistant */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <h3 className="text-xs font-black text-black uppercase tracking-widest bg-violet-100 border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <MessageSquare className="h-4 w-4 text-violet-600" />
+                Gemini Recycling Chatbot
+              </h3>
+              <p className="text-xs font-bold text-zinc-500">Ask the assistant about local recycling guidelines, garbage categorization, or sorting procedures.</p>
+
+              {/* Message Log Box */}
+              <div className="border-2 border-black rounded-2xl bg-zinc-50 p-4 h-64 overflow-y-auto space-y-3.5">
+                {chatMessages.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`p-3 rounded-2xl text-xs max-w-[85%] border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                      msg.role === 'user' ? 'bg-zinc-900 text-white border-black' : 'bg-white text-black border-black'
+                    }`}>
+                      <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="p-3 rounded-2xl text-xs bg-white text-zinc-500 border-2 border-black font-bold flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+                      Gemini is formulating recycling guide...
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Input form */}
+              <form onSubmit={handleSendChatMessage} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Can we recycle greasy pizza boxes? / Where do old cellphones go?"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={chatLoading}
+                  className="flex-1 text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:bg-white focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-5 rounded-xl border-2 border-black shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] font-black uppercase text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
+                >
+                  Ask
+                </button>
+              </form>
+            </div>
+
+            {/* 5. Pickup Time-Slot Scheduler */}
+            <div className="bg-white border-2 border-black p-6 rounded-3xl space-y-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <h3 className="text-xs font-black text-black uppercase tracking-widest bg-[#FFD700] border-2 border-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <Calendar className="h-4 w-4" />
+                NGO Pickup Scheduler
+              </h3>
+              <p className="text-xs font-bold text-zinc-500">Book specific date-time slots for handovers. Verified collectors will arrive directly to your floor lobby.</p>
+
+              <form onSubmit={handleSchedulePickup} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-[#FAF8F2] p-4 border-2 border-black rounded-2xl">
+                <div className="sm:col-span-5">
+                  <label className="block text-[10px] font-black uppercase text-zinc-650 mb-1">Select Pickup Date</label>
+                  <input
+                    type="date"
+                    value={pickupDate}
+                    onChange={(e) => setPickupDate(e.target.value)}
+                    required
+                    className="w-full text-xs p-2.5 border-2 border-black rounded-xl bg-white font-black cursor-pointer"
+                  />
+                </div>
+
+                <div className="sm:col-span-4">
+                  <label className="block text-[10px] font-black uppercase text-zinc-650 mb-1">Select Time Window</label>
+                  <select
+                    value={pickupTimeSlot}
+                    onChange={(e) => setPickupTimeSlot(e.target.value)}
+                    className="w-full text-xs p-2.5 border-2 border-black rounded-xl bg-white font-black cursor-pointer"
+                  >
+                    <option value="09:00 AM - 11:00 AM">Morning (09-11 AM)</option>
+                    <option value="11:00 AM - 01:00 PM">Midday (11 AM-01 PM)</option>
+                    <option value="02:00 PM - 04:00 PM">Noon (02-04 PM)</option>
+                    <option value="04:00 PM - 06:00 PM">Evening (04-06 PM)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-3">
+                  <button
+                    type="submit"
+                    className="w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-black py-3 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer active:translate-x-0.5 active:translate-y-0.5 text-center uppercase"
+                  >
+                    Schedule
+                  </button>
+                </div>
+              </form>
+
+              {/* Scheduled Pickups Status Log */}
+              <div className="space-y-2 pt-2">
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider block">Your Booked Schedules:</span>
+                <div className="space-y-2">
+                  {scheduledPickups.map((pick) => (
+                    <div key={pick.id} className="p-3 bg-white border-2 border-black rounded-xl flex items-center justify-between shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] text-xs">
+                      <div>
+                        <span className="font-mono text-[10px] text-zinc-450 uppercase block font-black">SCHEDULED SLOT</span>
+                        <span className="font-black text-black">{pick.date} @ {pick.timeSlot}</span>
+                        <p className="text-[10px] text-zinc-500 font-bold">Item: {pick.itemType}</p>
+                      </div>
+
+                      <div>
+                        {pick.status === 'completed' && (
+                          <span className="px-2.5 py-1 text-[9px] font-black uppercase text-emerald-800 bg-emerald-55 bg-emerald-100 border border-emerald-500 rounded-full">
+                            ✓ Handed Over
+                          </span>
+                        )}
+                        {pick.status === 'assigned' && (
+                          <span className="px-2.5 py-1 text-[9px] font-black uppercase text-amber-800 bg-amber-55 bg-amber-100 border border-amber-500 rounded-full animate-pulse">
+                            ● NGO Assigned
+                          </span>
+                        )}
+                        {pick.status === 'awaiting' && (
+                          <span className="px-2.5 py-1 text-[9px] font-black uppercase text-zinc-800 bg-zinc-55 bg-zinc-100 border border-black rounded-full">
+                            ● Finding NGO
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
 
         </div>
@@ -1000,6 +1793,15 @@ export default function ResidentPanel({
                 <p className="text-[11px] font-bold text-zinc-550">Chronological history of registered items preventing atmospheric carbon release.</p>
               </div>
 
+              {/* Download CSV button */}
+              <button
+                onClick={exportDonationLedgerToCSV}
+                className="px-3.5 py-2 bg-[#FFD700] hover:bg-amber-400 text-black border-2 border-black rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                title="Download historical donation data locally as a CSV spreadsheet"
+              >
+                <Download className="h-4 w-4" /> Download CSV
+              </button>
+
               {/* Aggregated indicators */}
               <div className="flex gap-2 text-right">
                 <div className="bg-emerald-50 border-2 border-black px-3 py-1 rounded-xl shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
@@ -1014,6 +1816,51 @@ export default function ResidentPanel({
                     {ledger.reduce((acc, curr) => acc + curr.pointsEarned, 0)} Pts
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* MY DONATIONS LOG TABLE */}
+            <div className="border-2 border-black rounded-2xl overflow-hidden bg-zinc-50">
+              <div className="p-3 bg-zinc-900 text-white text-[10px] font-black uppercase tracking-wider flex items-center justify-between">
+                <span>📋 My Donations Ledger Logs Table</span>
+                <span className="bg-emerald-500 text-black px-1.5 py-0.5 rounded text-[9px]">Excel Compatible</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-zinc-100 border-b-2 border-black text-zinc-650 font-black uppercase tracking-wider text-[10px]">
+                      <th className="p-3">Receipt ID / Date</th>
+                      <th className="p-3">Donated Item</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3 text-right">Offsets Saved</th>
+                      <th className="p-3 text-right">XP Points</th>
+                      <th className="p-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/10 bg-white font-bold text-zinc-800">
+                    {ledger.map((item) => (
+                      <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="font-mono text-zinc-500 block text-[10px]">{item.id.toUpperCase()}</span>
+                          <span className="text-[10px] font-bold text-zinc-400">{item.date}</span>
+                        </td>
+                        <td className="p-3 uppercase text-black font-black">{item.title}</td>
+                        <td className="p-3 text-[10px] uppercase">
+                          <span className="px-2 py-0.5 rounded bg-zinc-100 border border-zinc-300">
+                            {item.category}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-emerald-700 font-mono font-black">{item.co2SavedKg} Kg</td>
+                        <td className="p-3 text-right font-mono text-violet-600">+{item.pointsEarned}</td>
+                        <td className="p-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-400">
+                            ✓ Verified
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 

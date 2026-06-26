@@ -491,6 +491,79 @@ app.post('/api/ai/audit-donation', async (req, res) => {
   }
 });
 
+// 19. AI-powered Chat Assistant for local recycling and waste disposal guidelines
+app.post('/api/ai/chat', async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required for chat' });
+  }
+
+  if (!ai) {
+    // Elegant fallback guidelines response
+    const msgLower = message.toLowerCase();
+    let reply = "I can guide you! In Greenwood, please put organic scraps, tea leaves, and bio-waste in Green Bins. Plastics, metals, rinsed glass, and clean paper go in Blue Bins. E-waste must be logged for special caretaker collection.";
+    if (msgLower.includes('plastic') || msgLower.includes('bottle')) {
+      reply = "Plastics (PET bottles, dry containers, rinsed milk packets) must be deposited in the DRY blue bins. Please rinse to avoid bad odor or pests.";
+    } else if (msgLower.includes('electronic') || msgLower.includes('e-waste') || msgLower.includes('battery') || msgLower.includes('laptop')) {
+      reply = "Electronic waste, old batteries, tablets, and chargers must NOT be thrown into normal bins. Please use the 'Donate Goods' desk or log a pickup request for specialized caretaker recycling.";
+    } else if (msgLower.includes('food') || msgLower.includes('organic') || msgLower.includes('wet') || msgLower.includes('compost')) {
+      reply = "Wet waste like fruit peels, food leftovers, and compostables go straight into the green organic bins. Try to use biodegradable bags for disposal.";
+    }
+    return res.json({ reply });
+  }
+
+  try {
+    const prompt = `You are a helpful Swachh Bharat community AI recycling assistant. 
+    Explain local Indian municipal recycling guidelines and community waste disposal policies.
+    User asks: "${message}"
+    Provide a warm, structured, and informative answer (1-3 short paragraphs). Keep it encouraging and clear.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: prompt,
+    });
+
+    res.json({ reply: response.text?.trim() || "Thank you. Let's do our part for a cleaner community!" });
+  } catch (err: any) {
+    console.error('Chat exception:', err);
+    res.status(500).json({ error: 'AI Assistant failed to generate a response' });
+  }
+});
+
+// 20. AI Personalized Daily Eco-Tip based on resident's focus category
+app.post('/api/ai/daily-tip', async (req, res) => {
+  const { category } = req.body;
+  const targetCategory = category || 'Composting';
+
+  if (!ai) {
+    // Elegant fallback eco-tips
+    const tips: { [key: string]: string } = {
+      'Composting': 'Add a thin layer of dry leaves or newspaper shreds on top of your kitchen scraps to keep fruit flies away and speed up composting decomposition.',
+      'Electronics': 'Instead of discarding old adapters, label them with paper tape. Organize cables with reusable velcro ties so they stay safe for local NGO reuse.',
+      'Textiles': 'Before discarding damaged clothes, consider cutting them into custom cleaning rags or rags for your car, reducing single-use paper roll waste by 40%.',
+      'Plastics': 'Rinse oil packets or greasy milk pouches with warm water first. Sticky plastics cannot be recycled and will contaminate other dry waste.',
+      'General': 'Try carrying a small reusable fabric bag in your pocket. Refusing just one plastic carry bag per day saves over 360 bags annually from ocean landfill dumps.'
+    };
+    const tip = tips[targetCategory] || tips['General'];
+    return res.json({ tip });
+  }
+
+  try {
+    const prompt = `Generate a highly action-oriented, personalized daily eco-tip for a resident focusing on the category: "${targetCategory}".
+    Keep it strictly to 1-2 sentences. Make it extremely practical, smart, and specific to household operations. No hype, just clear utility.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: prompt,
+    });
+
+    res.json({ tip: response.text?.trim() || "Keep sorting and minimizing waste to preserve our neighborhood cleanliness!" });
+  } catch (err: any) {
+    console.error('Eco-tip exception:', err);
+    res.status(500).json({ error: 'AI failed to generate daily eco-tip' });
+  }
+});
+
 
 // ---------------- CONFIGURING DEV AND PRODUCTION ENTRY ----------------
 
