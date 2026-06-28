@@ -18,7 +18,8 @@ import {
   Download,
   Volume2,
   VolumeX,
-  Camera
+  Camera,
+  TrendingUp
 } from 'lucide-react';
 import { 
   Portal, 
@@ -57,6 +58,13 @@ export default function ResidentPanel({
     { id: 'l3', date: '20 Jun 2026', title: '5 Kg Fresh Wheat packets', category: 'Food', co2SavedKg: 7.5, pointsEarned: 375 },
   ]);
 
+  const [claimedCoupons, setClaimedCoupons] = useState<string[]>([]);
+  const handleClaimCoupon = (couponName: string, cost: number) => {
+    setClaimedCoupons(prev => [...prev, couponName]);
+    triggerParticles();
+    alert(`🎉 Successfully claimed: "${couponName}"!\nYour unique Eco-Voucher code: ECO-${Math.random().toString(36).substr(2, 6).toUpperCase()}\nShow this to the society caretaker or merchant to redeem.`);
+  };
+
   // Resident floor filter
   const [residentFloor, setResidentFloor] = useState<number>(1);
 
@@ -92,8 +100,20 @@ export default function ResidentPanel({
     if (hasLoggedToday) return;
     setEcoStreak(prev => prev + 1);
     setHasLoggedToday(true);
+
+    // Add Eco-Disposal points to ledger!
+    const newEntry = {
+      id: `l-disposal-${Date.now()}`,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      title: 'Daily Segregated Waste Disposal Task',
+      category: 'DISPOSAL',
+      co2SavedKg: 1.5,
+      pointsEarned: 75
+    };
+    setLedger(prev => [newEntry, ...prev]);
+
     triggerParticles();
-    alert("Incredible! Eco-Activity logged. Streak increased to " + (ecoStreak + 1) + " days! 🌱🔥");
+    alert("Incredible! Segregated Waste Disposal logged. Streak increased to " + (ecoStreak + 1) + " days. +75 Pts earned! 🌱🔥");
   };
 
   // Local caching (IndexedDB/LocalStorage Simulation)
@@ -205,6 +225,73 @@ export default function ResidentPanel({
   const [compCat, setCompCat] = useState<'delay' | 'missed' | 'spilt' | 'sorting_issue' | 'others'>('delay');
   const [compDesc, setCompDesc] = useState('');
   const [submittingComp, setSubmittingComp] = useState(false);
+
+  // Complaint photo and AI classification states
+  const [complaintPhoto, setComplaintPhoto] = useState<string | null>(null);
+  const [isClassifyingComp, setIsClassifyingComp] = useState(false);
+  const [compAiFeedback, setCompAiFeedback] = useState<{
+    predictedCategory: 'spilt' | 'sorting_issue' | 'delay' | 'others';
+    severityRating: 'low' | 'medium' | 'high';
+    confidenceScore: number;
+    summaryTags: string[];
+    auditNotes: string;
+  } | null>(null);
+
+  const handleComplaintPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setComplaintPhoto(reader.result as string);
+      setCompAiFeedback(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerMockComplaintCapture = () => {
+    // Simulated realistic complaint capture
+    setComplaintPhoto('MOCK_COMPLAINT_IMAGE');
+    setCompAiFeedback(null);
+  };
+
+  const runComplaintAiClassification = async () => {
+    if (!complaintPhoto) {
+      alert("Please capture or upload a complaint photo first.");
+      return;
+    }
+
+    try {
+      setIsClassifyingComp(true);
+      setCompAiFeedback(null);
+
+      let cleanBase64 = complaintPhoto;
+      if (cleanBase64 === 'MOCK_COMPLAINT_IMAGE') {
+        cleanBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      } else if (cleanBase64.includes('base64,')) {
+        cleanBase64 = cleanBase64.split('base64,')[1];
+      }
+
+      const res = await fetch('/api/ai/classify-complaint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data: cleanBase64, mimeType: 'image/png' })
+      });
+      const data = await res.json();
+      setCompAiFeedback(data);
+
+      if (data.predictedCategory) {
+        setCompCat(data.predictedCategory);
+      }
+      if (data.auditNotes) {
+        setCompDesc(prev => prev ? `${prev}\n\n[AI Vision Check: ${data.auditNotes}]` : `[AI Vision Check: ${data.auditNotes}]`);
+      }
+    } catch {
+      alert("AI Classification failed.");
+    } finally {
+      setIsClassifyingComp(false);
+    }
+  };
 
   // Donation form states
   const [donTitle, setDonTitle] = useState('');
@@ -397,6 +484,14 @@ export default function ResidentPanel({
     return true;
   });
 
+  // Filter urgent bin image alerts classified as 'Full' or 'Critical'
+  const urgentBinAlerts = activeNotifs.filter(n => {
+    const isBin = n.title.toLowerCase().includes('bin') || n.body.toLowerCase().includes('bin');
+    const isUrgent = n.title.toLowerCase().includes('critical') || n.title.toLowerCase().includes('full') ||
+                     n.body.toLowerCase().includes('critical') || n.body.toLowerCase().includes('full');
+    return isBin && isUrgent;
+  });
+
   const handleSubmitComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loggedInUser || !compTitle || !compDesc) return;
@@ -413,6 +508,8 @@ export default function ResidentPanel({
       });
       setCompTitle('');
       setCompDesc('');
+      setComplaintPhoto(null);
+      setCompAiFeedback(null);
       triggerParticles();
       alert("Feedback logged securely. Caretaker notified!");
     } catch {
@@ -1255,6 +1352,39 @@ export default function ResidentPanel({
                 </div>
               </div>
 
+              {/* Urgent Attention Required Banner */}
+              {urgentBinAlerts.length > 0 && (
+                <div className="bg-red-50 border-4 border-[#F43F5E] p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(244,63,94,0.4)] space-y-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-[#F43F5E] animate-bounce shrink-0" />
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black uppercase text-black tracking-tight">🚨 URGENT ATTENTION REQUIRED</h4>
+                      <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wide">
+                        AI Image Analysis detected {urgentBinAlerts.length} Critical/Full waste containers requiring immediate clearing.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {urgentBinAlerts.map(alertNotif => (
+                      <div key={alertNotif.id} className="bg-white border-2 border-black rounded-xl p-3 flex gap-2.5 items-start">
+                        <div className="p-1.5 rounded-lg bg-red-100 text-[#F43F5E] border border-black font-extrabold text-[9px] uppercase shrink-0">
+                          {alertNotif.title.includes('CRITICAL') ? 'CRITICAL' : 'FULL'}
+                        </div>
+                        <div className="flex-1 space-y-1 min-w-0">
+                          <p className="text-[11px] font-black text-black leading-tight truncate">{alertNotif.title}</p>
+                          <p className="text-[10px] font-bold text-zinc-600 leading-normal line-clamp-2">{alertNotif.body}</p>
+                          <div className="flex items-center gap-2 text-[8px] font-black uppercase tracking-wider text-zinc-400">
+                            <span>Level: {alertNotif.floor}</span>
+                            <span>•</span>
+                            <span>Detected by: {alertNotif.senderName}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {activeNotifs.length === 0 ? (
                 <div className="p-12 border-4 border-dashed border-zinc-300 rounded-2xl text-center text-zinc-500 font-bold text-xs uppercase bg-[#FAF8F2]">
                   Everything fully cleared! No active environmental hazards or sweeper logs on Level {residentFloor}.
@@ -1348,6 +1478,115 @@ export default function ResidentPanel({
                   required
                   className="w-full text-xs p-3 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:bg-white focus:outline-none"
                 />
+              </div>
+
+              {/* Photo attachment & AI Classification area */}
+              <div className="space-y-2 border-t-2 border-dashed border-zinc-200 pt-3">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-[#F43F5E]">
+                  Attach Spill/Hazard Photo
+                </label>
+                
+                {/* Visual Thumbnail Preview area */}
+                {complaintPhoto ? (
+                  <div className="space-y-2">
+                    <div className="relative border-2 border-black rounded-xl p-2 bg-[#FAF8F2] flex items-center justify-between gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {complaintPhoto === 'MOCK_COMPLAINT_IMAGE' ? (
+                          <div className="h-14 w-14 rounded-lg bg-rose-105 bg-rose-100 border border-black flex items-center justify-center text-xl shrink-0 font-bold select-none">
+                            🗑️
+                          </div>
+                        ) : (
+                          <img 
+                            src={complaintPhoto} 
+                            alt="Complaint Thumbnail Preview" 
+                            className="h-14 w-14 rounded-lg object-cover border border-black shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                        <div className="truncate">
+                          <p className="text-[10px] font-black text-black">Attached Photo</p>
+                          <p className="text-[9px] font-bold text-zinc-500 uppercase">Ready for AI Classification</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComplaintPhoto(null);
+                          setCompAiFeedback(null);
+                        }}
+                        className="bg-black hover:bg-rose-600 hover:text-white text-white p-1 rounded-md border border-black transition-colors shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* AI Classification button & info */}
+                    {!compAiFeedback ? (
+                      <button
+                        type="button"
+                        onClick={runComplaintAiClassification}
+                        disabled={isClassifyingComp}
+                        className="w-full border-2 border-black bg-amber-400 hover:bg-amber-500 text-black font-black py-2 px-3 rounded-xl text-[10px] uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                      >
+                        {isClassifyingComp ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin text-black" />
+                            <span>AI Analyzing Spill Image...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3.5 w-3.5 text-white p-0.5 rounded bg-black border border-black" />
+                            <span>Classify & Autofill via Gemini AI</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="bg-amber-50 border-2 border-black p-3 rounded-xl text-[10.5px] font-bold space-y-1 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex items-center justify-between border-b border-black/10 pb-1 mb-1">
+                          <span className="text-[9px] text-[#7C3AED] uppercase font-black tracking-wider flex items-center gap-1">
+                            ✨ Gemini Vision Analysis:
+                          </span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[8px] font-extrabold uppercase px-1 py-0.5 rounded">
+                            {Math.round(compAiFeedback.confidenceScore * 100)}% Match
+                          </span>
+                        </div>
+                        <p className="leading-relaxed">
+                          <span className="font-extrabold text-[#F43F5E] uppercase text-[9.5px]">Detected:</span> {compAiFeedback.auditNotes}
+                        </p>
+                        <div className="flex flex-wrap gap-1 pt-1.5">
+                          {compAiFeedback.summaryTags.map((tag, i) => (
+                            <span key={i} className="bg-white border border-black/10 text-[8.5px] font-extrabold uppercase px-1.5 py-0.5 rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={triggerMockComplaintCapture}
+                      className="border-2 border-black bg-[#FAF8F2] hover:bg-[#FFD700]/15 text-black font-black py-2.5 px-3 rounded-xl text-[10px] uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                    >
+                      <Camera className="h-4 w-4 text-[#F43F5E]" />
+                      <span>Simulate Camera</span>
+                    </button>
+                    
+                    <div className="relative border-2 border-black rounded-xl bg-[#FAF8F2] hover:bg-zinc-50 transition-colors flex items-center justify-center text-center cursor-pointer p-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleComplaintPhotoUpload}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-black uppercase text-black flex items-center gap-1">
+                        📁 Upload Photo
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -2152,6 +2391,112 @@ export default function ResidentPanel({
               <Download className="h-4 w-4" />
               Download Official PNG Certificate
             </button>
+
+            {/* Eco-Reward Wallet & Claim Desk */}
+            <div className="bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl space-y-3.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-left">
+              <div className="flex items-center gap-1.5 border-b border-black/10 pb-2">
+                <Gift className="h-5 w-5 text-indigo-600 animate-pulse" />
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black uppercase text-black">⚡ Eco-Reward Wallet & Claim Desk</h3>
+                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">Convert your sustainable ledger points into real community perks!</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-white border border-black p-2.5 rounded-xl">
+                <div>
+                  <span className="block text-[8px] font-extrabold uppercase text-zinc-400">Spendable Points</span>
+                  <span className="text-sm font-mono font-black text-indigo-600">
+                    {ledger.reduce((acc, curr) => acc + curr.pointsEarned, 0)} Pts
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="block text-[8px] font-extrabold uppercase text-zinc-400">Coupons Claimed</span>
+                  <span className="text-sm font-mono font-black text-emerald-600">
+                    {claimedCoupons.length} Claimed
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bar to next Milestone */}
+              {(() => {
+                const currentPts = ledger.reduce((acc, curr) => acc + curr.pointsEarned, 0);
+                const milestoneGoal = 1000;
+                const nextMilestone = Math.ceil((currentPts + 1) / milestoneGoal) * milestoneGoal;
+                const currentMilestoneStart = nextMilestone - milestoneGoal;
+                const progressInMilestone = currentPts - currentMilestoneStart;
+                const progressPercentage = Math.min(100, Math.round((progressInMilestone / milestoneGoal) * 100));
+
+                return (
+                  <div className="space-y-1 bg-white border border-black p-2.5 rounded-xl">
+                    <div className="flex justify-between items-center text-[9px] font-black uppercase text-black">
+                      <span>🎁 Milestone Progress</span>
+                      <span className="font-mono text-indigo-600">{currentPts} / {nextMilestone} Pts</span>
+                    </div>
+                    {/* Progress bar container */}
+                    <div className="w-full bg-zinc-150 border border-black h-3.5 rounded-full overflow-hidden p-0.5">
+                      <div 
+                        className="bg-emerald-500 h-full rounded-full transition-all duration-1000 border-r border-black" 
+                        style={{ width: `${progressPercentage}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[7.5px] font-black text-zinc-500 uppercase leading-none mt-0.5">
+                      <span>Progress: {progressPercentage}%</span>
+                      <span>{nextMilestone - currentPts} Pts to next bonus</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* List of Redeemable Eco Perks */}
+              <div className="space-y-2">
+                <span className="text-[9px] font-black uppercase text-black tracking-wider block">Available Redemptions:</span>
+                <div className="space-y-1.5 max-h-[190px] overflow-y-auto pr-1">
+                  {[
+                    { id: 'perk-1', title: '1 Kg Organic Compost Pack', cost: 300, icon: '🌿', desc: 'Premium compost from society bio-reactors.' },
+                    { id: 'perk-2', title: 'Partner Café 15% Eco-Discount', cost: 500, icon: '☕', desc: 'Discount voucher at sustainable cafés.' },
+                    { id: 'perk-3', title: 'Solar Garden Lawn Lamp Kit', cost: 1200, icon: '☀️', desc: 'Stake-mounted outdoor solar garden lighting.' }
+                  ].map(perk => {
+                    const totalPts = ledger.reduce((acc, curr) => acc + curr.pointsEarned, 0);
+                    const isEligible = totalPts >= perk.cost;
+                    const isClaimed = claimedCoupons.includes(perk.id);
+
+                    return (
+                      <div key={perk.id} className="border border-black p-2 rounded-lg bg-white flex items-center justify-between gap-2 text-left">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-md shrink-0">{perk.icon}</span>
+                          <div className="truncate">
+                            <p className="text-[9px] font-black text-black leading-tight truncate">{perk.title}</p>
+                            <p className="text-[7.5px] font-bold text-zinc-400 truncate leading-none mt-0.5">{perk.desc}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[8px] font-mono font-black bg-zinc-50 border border-zinc-200 px-1 py-0.5 rounded text-zinc-550">
+                            {perk.cost} Pts
+                          </span>
+                          {isClaimed ? (
+                            <span className="bg-zinc-100 text-zinc-400 text-[7px] font-black uppercase px-1.5 py-0.5 rounded border border-zinc-200">
+                              Claimed
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleClaimCoupon(perk.id, perk.cost)}
+                              disabled={!isEligible}
+                              className={`px-2 py-0.5 text-[7.5px] font-black uppercase rounded border transition-colors ${
+                                isEligible
+                                  ? 'bg-[#FFD700] border-black hover:bg-amber-400 cursor-pointer text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'
+                                  : 'bg-zinc-50 text-zinc-300 border-zinc-200 cursor-not-allowed'
+                              }`}
+                            >
+                              {isEligible ? 'Claim' : 'Locked'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -57,6 +57,9 @@ export default function CollectorPanel({
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [qrScanning, setQrScanning] = useState(false);
   const [scannedBinId, setScannedBinId] = useState<string | null>(null);
+  const qrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const qrStreamRef = useRef<MediaStream | null>(null);
+  const [useRealQrCamera, setUseRealQrCamera] = useState(false);
 
   // Real-time telemetry simulation state
   const [telemetryData, setTelemetryData] = useState<{
@@ -112,6 +115,71 @@ export default function CollectorPanel({
     }, 1200);
   };
 
+  const stopQrCamera = () => {
+    if (qrStreamRef.current) {
+      qrStreamRef.current.getTracks().forEach(track => track.stop());
+      qrStreamRef.current = null;
+    }
+    setUseRealQrCamera(false);
+  };
+
+  const handleRealQrScan = async () => {
+    try {
+      setUseRealQrCamera(true);
+      setQrScanning(true);
+      setScannedBinId(null);
+      speakPrompt("Activating physical camera scanner. Align the green target box with the QR sticker.");
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240, facingMode: 'environment' }
+      });
+      qrStreamRef.current = stream;
+      if (qrVideoRef.current) {
+        qrVideoRef.current.srcObject = stream;
+        qrVideoRef.current.play();
+      }
+
+      // Simulate decoding after 2.5 seconds
+      setTimeout(() => {
+        // Stop camera
+        if (qrStreamRef.current) {
+          qrStreamRef.current.getTracks().forEach(track => track.stop());
+          qrStreamRef.current = null;
+        }
+        setUseRealQrCamera(false);
+        setQrScanning(false);
+
+        // Pick a dynamic realistic floor from currentPortal's floors
+        const floorNum = Math.floor(Math.random() * currentPortal.floorsCount) + 1;
+        const binCategories = ['Organic Compostables', 'Dry Recyclables', 'Hazardous E-Waste'];
+        const randomCat = binCategories[Math.floor(Math.random() * binCategories.length)];
+        const binCode = `BIN-F${floorNum}-${randomCat.slice(0, 3).toUpperCase()}-${Math.floor(Math.random() * 900) + 100}`;
+
+        setScannedBinId(binCode);
+        setSelectedFloor(floorNum);
+        setCollectionStatus('completed');
+        setSweeperNotes(`Device Camera QR Scan Successful!\nBin ID: ${binCode}\nCategory: ${randomCat}\nLocation: Floor ${floorNum}\nStatus: Completed and ready for log upload.`);
+        speakPrompt(`Success! Scanned bin ${binCode} on Floor ${floorNum}. Location and completed status populated.`);
+      }, 2500);
+
+    } catch (err) {
+      console.warn("Camera QR scan error or blocked:", err);
+      // Fallback if mediaDevices is blocked or not supported
+      setQrScanning(false);
+      setUseRealQrCamera(false);
+      alert("Device camera is blocked or unavailable inside the iframe. Reverting to instant simulated QR code reader.");
+      
+      // Simulative backup scan
+      const floorNum = Math.floor(Math.random() * currentPortal.floorsCount) + 1;
+      const binCode = `BIN-F${floorNum}-DRY-${Math.floor(Math.random() * 900) + 100}`;
+      setScannedBinId(binCode);
+      setSelectedFloor(floorNum);
+      setCollectionStatus('completed');
+      setSweeperNotes(`Simulated Scan Successful!\nBin ID: ${binCode}\nLocation: Floor ${floorNum}\nStatus: Completed.`);
+      speakPrompt(`Scanned bin ${binCode} on Floor ${floorNum} using fallback simulated encoder.`);
+    }
+  };
+
   // Initialize SpeechSynthesis narrator helper
   const speakPrompt = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -131,6 +199,7 @@ export default function CollectorPanel({
     }
     return () => {
       stopCamera();
+      stopQrCamera();
     };
   }, [loggedInCollector, currentPortal]);
 
@@ -461,28 +530,51 @@ export default function CollectorPanel({
                   </p>
 
                   <div className="relative aspect-video max-w-sm mx-auto rounded-xl overflow-hidden border-2 border-black bg-zinc-900 flex flex-col items-center justify-center">
+                    {useRealQrCamera && (
+                      <video
+                        ref={qrVideoRef}
+                        className="absolute inset-0 w-full h-full object-cover z-0"
+                        playsInline
+                        muted
+                      />
+                    )}
+
                     {/* Simulated laser scan bar */}
                     {qrScanning && (
                       <div className="absolute inset-x-0 top-0 h-1 bg-red-500 shadow-[0_0_8px_2px_rgba(239,68,68,0.8)] animate-bounce z-10"></div>
                     )}
 
-                    {qrScanning ? (
-                      <div className="text-center space-y-2 text-[#10B981] font-mono text-[9px] tracking-wider">
-                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-[#10B981]" />
-                        <span>DECODING_BIN_GEOLOCATION_STAMP_HASH...</span>
-                      </div>
-                    ) : scannedBinId ? (
-                      <div className="text-center p-3 text-emerald-800 space-y-1">
-                        <div className="h-9 w-9 bg-white border border-black rounded-full mx-auto flex items-center justify-center font-black">✔️</div>
-                        <p className="text-[10px] font-black uppercase tracking-wider">Bin scanned successfully!</p>
-                        <p className="text-[11px] font-mono bg-white px-2 py-0.5 border border-zinc-300 rounded font-black inline-block">{scannedBinId}</p>
-                      </div>
-                    ) : (
-                      <div className="text-center text-zinc-400 p-4 space-y-2">
-                        <QrCode className="h-8 w-8 mx-auto stroke-[1.5]" />
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Laser Camera Active</p>
-                      </div>
-                    )}
+                    <div className="relative z-10 text-center">
+                      {qrScanning ? (
+                        <div className="text-center space-y-2 text-[#10B981] font-mono text-[9px] tracking-wider bg-black/60 px-3 py-1.5 rounded-lg">
+                          <Loader2 className="h-5 w-5 animate-spin mx-auto text-[#10B981]" />
+                          <span>DECODING_BIN_GEOLOCATION_STAMP_HASH...</span>
+                        </div>
+                      ) : scannedBinId ? (
+                        <div className="text-center p-3 text-emerald-800 space-y-1 bg-white/95 border border-black rounded-xl max-w-xs mx-auto">
+                          <div className="h-8 w-8 bg-emerald-100 border border-emerald-600 rounded-full mx-auto flex items-center justify-center font-black text-emerald-850">✔️</div>
+                          <p className="text-[10px] font-black uppercase tracking-wider">Bin scanned successfully!</p>
+                          <p className="text-[11px] font-mono bg-white px-2 py-0.5 border border-zinc-300 rounded font-black inline-block">{scannedBinId}</p>
+                        </div>
+                      ) : (
+                        <div className="text-center text-zinc-400 p-4 space-y-2 bg-black/50 rounded-xl">
+                          <QrCode className="h-8 w-8 mx-auto stroke-[1.5] text-indigo-400 animate-pulse" />
+                          <p className="text-[9px] font-black uppercase tracking-widest text-zinc-200">Laser Camera Active</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Real Camera Trigger Button */}
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      disabled={qrScanning}
+                      onClick={handleRealQrScan}
+                      className="w-full max-w-xs py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-wider rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="h-3.5 w-3.5" /> Scan QR with Device Camera
+                    </button>
                   </div>
 
                   {/* Preset Simulation scan targets */}

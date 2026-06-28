@@ -131,6 +131,26 @@ const DEFAULT_NOTIFICATIONS: FlatAlertNotification[] = [
     senderName: 'Shyamal Sen (Caretaker)',
     createdAt: new Date(Date.now() - 1 * 3600000).toISOString(),
     severity: 'high'
+  },
+  {
+    id: 'notif-3',
+    portalId: 'portal-1',
+    floor: 1,
+    title: '[AI Classification: CRITICAL] Bin Image Analysis - Level 1 Main Bin is 100% Full',
+    body: 'AI Vision Alert: Camera at Level 1 lobby has analyzed the main dry waste bin and classified its status as CRITICAL (100% Capacity exceeded). Hazardous overflow is imminent. Cleanup crew dispatched immediately.',
+    senderName: 'AI Safety Monitor',
+    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+    severity: 'high'
+  },
+  {
+    id: 'notif-4',
+    portalId: 'portal-1',
+    floor: 3,
+    title: '[AI Classification: FULL] Bin Image Analysis - Level 3 Lobby Wet Bin is 90% Full',
+    body: 'AI Vision Alert: Camera at Level 3 elevator lobby has analyzed the organic wet bin and classified its status as FULL (90% capacity). Emptying requested before odor leakage.',
+    senderName: 'AI Safety Monitor',
+    createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+    severity: 'medium'
   }
 ];
 

@@ -52,6 +52,7 @@ export default function LeaderboardMetrics({
 }: LeaderboardMetricsProps) {
 
   const d3ContainerRef = useRef<SVGSVGElement | null>(null);
+  const d3MonthlyChartRef = useRef<SVGSVGElement | null>(null);
   const [heatmapView, setHeatmapView] = useState<'waste' | 'donation'>('donation');
 
   // Hierarchy selection states
@@ -140,6 +141,211 @@ export default function LeaderboardMetrics({
     }
     return data;
   };
+
+  // Generate monthly waste reduction trends pulling from the impactMetrics state (metrics)
+  const getMonthlyReductionData = () => {
+    const baseCollected = metrics ? metrics.totalWasteCollectedKg * multiplier : 1845.5;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    const reductionPercentages = [0.15, 0.22, 0.28, 0.35, 0.42, 0.54]; 
+    
+    return months.map((month, idx) => {
+      const totalCollectedThisMonth = baseCollected * (0.12 + Math.sin(idx * 0.4) * 0.02);
+      const recycledKg = totalCollectedThisMonth * reductionPercentages[idx];
+      return {
+        month,
+        wasteCollected: Math.round(totalCollectedThisMonth),
+        wasteReduced: Math.round(recycledKg),
+        rate: Math.round(reductionPercentages[idx] * 100)
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!d3MonthlyChartRef.current || !metrics) return;
+
+    // Clear old drawings
+    d3.select(d3MonthlyChartRef.current).selectAll('*').remove();
+
+    const svg = d3.select(d3MonthlyChartRef.current);
+    const width = 640;
+    const height = 280;
+    const margin = { top: 40, right: 60, bottom: 40, left: 60 };
+
+    svg.attr('viewBox', `0 0 ${width} ${height}`)
+       .attr('width', '100%')
+       .attr('height', '100%');
+
+    const data = getMonthlyReductionData();
+
+    // Scales
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.month))
+      .range([margin.left, width - margin.right])
+      .padding(0.3);
+
+    const yLeft = d3.scaleLinear()
+      .domain([0, (d3.max(data, d => d.wasteReduced) || 100) * 1.2])
+      .nice()
+      .range([height - margin.bottom, margin.top]);
+
+    const yRight = d3.scaleLinear()
+      .domain([0, 100])
+      .range([height - margin.bottom, margin.top]);
+
+    // Draw Axes
+    const xAxis = d3.axisBottom(x);
+    const yAxisLeft = d3.axisLeft(yLeft).ticks(5);
+    const yAxisRight = d3.axisRight(yRight).ticks(5);
+
+    // Grid lines for left axis
+    svg.append('g')
+      .attr('class', 'grid')
+      .attr('transform', `translate(${margin.left},0)`)
+      .call(d3.axisLeft(yLeft)
+        .tickSize(-width + margin.left + margin.right)
+        .tickFormat(() => '')
+      )
+      .call(g => g.select('.domain').remove())
+      .call(g => g.selectAll('.tick line')
+        .attr('stroke', 'rgba(0,0,0,0.06)')
+        .attr('stroke-dasharray', '3,3')
+      );
+
+    // X Axis Group
+    svg.append('g')
+      .attr('transform', `translate(0,${height - margin.bottom})`)
+      .call(xAxis)
+      .call(g => g.select('.domain').attr('stroke', '#000').attr('stroke-width', 2))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#000').attr('stroke-width', 1.5))
+      .call(g => g.selectAll('text')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', '10px')
+        .attr('font-weight', 'bold')
+        .attr('fill', '#000')
+      );
+
+    // Y Axis Left Group (Waste Reduced)
+    svg.append('g')
+      .attr('transform', `translate(${margin.left},0)`)
+      .call(yAxisLeft)
+      .call(g => g.select('.domain').attr('stroke', '#000').attr('stroke-width', 2))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#000').attr('stroke-width', 1.5))
+      .call(g => g.selectAll('text')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', '10px')
+        .attr('font-weight', 'bold')
+        .attr('fill', '#000')
+      );
+
+    // Y Axis Right Group (Reduction Rate)
+    svg.append('g')
+      .attr('transform', `translate(${width - margin.right},0)`)
+      .call(yAxisRight)
+      .call(g => g.select('.domain').attr('stroke', '#000').attr('stroke-width', 2))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#000').attr('stroke-width', 1.5))
+      .call(g => g.selectAll('text')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', '10px')
+        .attr('font-weight', 'bold')
+        .attr('fill', '#000')
+      );
+
+    // Add Bars for Waste Reduced
+    svg.selectAll('.bar')
+      .data(data)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => x(d.month) || 0)
+      .attr('y', d => yLeft(d.wasteReduced))
+      .attr('width', x.bandwidth())
+      .attr('height', d => height - margin.bottom - yLeft(d.wasteReduced))
+      .attr('fill', '#3B82F6') 
+      .attr('stroke', '#000000')
+      .attr('stroke-width', 2)
+      .attr('rx', 4)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event, d) {
+        d3.select(this).attr('fill', '#1D4ED8');
+        svg.select('#monthly-tooltip')
+          .attr('visibility', 'visible')
+          .text(`${d.month}: ${d.wasteReduced} Kg Diverted (${d.rate}% Rate)`);
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('fill', '#3B82F6');
+        svg.select('#monthly-tooltip').attr('visibility', 'hidden');
+      });
+
+    // Add Line for Reduction Rate
+    const lineGenerator = d3.line<{ month: string; wasteCollected: number; wasteReduced: number; rate: number }>()
+      .x(d => (x(d.month) || 0) + x.bandwidth() / 2)
+      .y(d => yRight(d.rate))
+      .curve(d3.curveMonotoneX);
+
+    svg.append('path')
+      .datum(data)
+      .attr('fill', 'none')
+      .attr('stroke', '#10B981') 
+      .attr('stroke-width', 3)
+      .attr('d', lineGenerator);
+
+    // Add Dots over Line
+    svg.selectAll('.dot')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'dot')
+      .attr('cx', d => (x(d.month) || 0) + x.bandwidth() / 2)
+      .attr('cy', d => yRight(d.rate))
+      .attr('r', 5)
+      .attr('fill', '#FFF')
+      .attr('stroke', '#10B981')
+      .attr('stroke-width', 3)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event, d) {
+        d3.select(this).attr('r', 8);
+        svg.select('#monthly-tooltip')
+          .attr('visibility', 'visible')
+          .text(`${d.month}: Reduction Rate ${d.rate}%`);
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('r', 5);
+        svg.select('#monthly-tooltip').attr('visibility', 'hidden');
+      });
+
+    // Axis titles
+    svg.append('text')
+      .attr('x', margin.left)
+      .attr('y', margin.top - 15)
+      .attr('font-family', 'Inter, sans-serif')
+      .attr('font-size', '10px')
+      .attr('font-weight', 'bold')
+      .attr('fill', '#3B82F6')
+      .text('Waste Reduced (Kg)');
+
+    svg.append('text')
+      .attr('x', width - margin.right)
+      .attr('y', margin.top - 15)
+      .attr('text-anchor', 'end')
+      .attr('font-family', 'Inter, sans-serif')
+      .attr('font-size', '10px')
+      .attr('font-weight', 'bold')
+      .attr('fill', '#10B981')
+      .text('Reduction Rate (%)');
+
+    // Tooltip overlay text
+    svg.append('text')
+      .attr('id', 'monthly-tooltip')
+      .attr('x', width / 2)
+      .attr('y', margin.top - 15)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('font-size', '11px')
+      .attr('font-weight', 'black')
+      .attr('fill', '#000000')
+      .attr('visibility', 'hidden');
+
+  }, [metrics, multiplier]);
 
   useEffect(() => {
     if (!d3ContainerRef.current || !metrics) return;
@@ -958,6 +1164,53 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* D3 Monthly Waste Reduction Trends Chart */}
+      <div className="bg-white vibrant-border p-4 sm:p-6 rounded-3xl vibrant-shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-blue-600 animate-pulse" />
+            <div>
+              <h3 className="text-md sm:text-lg font-black uppercase tracking-tight text-black">📊 Monthly Waste Reduction Trends (D3.js)</h3>
+              <p className="text-[10px] sm:text-xs font-bold text-zinc-550">D3-rendered monthly reduction metrics mapping trash diversion (Kg) against efficiency rate (%) over the last 6 months.</p>
+            </div>
+          </div>
+          <div className="text-[10px] font-black uppercase text-zinc-500 bg-[#FAF8F2] border border-black/10 px-2.5 py-1 rounded">
+            Live D3 Engine
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-center">
+          <div className="lg:col-span-3 border-4 border-black rounded-2xl bg-[#FAF8F2]/30 p-2 sm:p-4 overflow-hidden relative shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="w-full h-full flex justify-center items-center">
+              <svg 
+                ref={d3MonthlyChartRef} 
+                className="w-full h-auto max-h-[280px] select-none" 
+              />
+            </div>
+          </div>
+
+          <div className="lg:col-span-1 space-y-3 bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl h-full flex flex-col justify-center">
+            <h4 className="text-xs font-black uppercase text-black flex items-center gap-1">
+              <Info className="h-4 w-4 text-blue-600 shrink-0" />
+              Chart Insights
+            </h4>
+            <p className="text-[11.5px] font-bold text-zinc-650 leading-relaxed">
+              This chart showcases a dynamic D3 visualization where vertical columns denote **Waste Diverted/Reduced** (recycled or composted in Kg, left axis) and the green trendline maps the **Overall Efficiency Rate** (percentage, right axis).
+            </p>
+            <div className="pt-2 border-t border-black/10 text-[10px] space-y-1.5 font-bold uppercase text-zinc-600">
+              <div className="flex items-center gap-1.5">
+                <span className="h-3.5 w-3.5 rounded border border-black bg-blue-500 inline-block shrink-0"></span>
+                <span>Diverted Waste (Kg)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3.5 w-3.5 rounded border border-black bg-emerald-500 inline-block shrink-0"></span>
+                <span>Efficiency Rate (%)</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

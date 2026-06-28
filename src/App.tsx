@@ -137,6 +137,22 @@ export default function App() {
     loadAllRecords();
   }, []);
 
+  // Auto-dismiss high-priority notification after 10 seconds to keep UI clean
+  useEffect(() => {
+    if (notifications.length > 0 && notifications[0].severity === 'high') {
+      const activeNotifId = notifications[0].id;
+      const timer = setTimeout(() => {
+        setNotifications(prev => {
+          if (prev.length > 0 && prev[0].id === activeNotifId) {
+            return prev.slice(1);
+          }
+          return prev;
+        });
+      }, 10000); // 10 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [notifications]);
+
   const loadAllRecords = async () => {
     try {
       setLoading(true);
@@ -182,6 +198,20 @@ export default function App() {
       setImpactMetrics(metricsPayload.metrics);
       setPortalImpacts(metricsPayload.entityImpact);
 
+      // Save to localStorage for robust offline capability
+      try {
+        localStorage.setItem('cached-portals', JSON.stringify(portalsData));
+        localStorage.setItem('cached-users', JSON.stringify(usersData));
+        localStorage.setItem('cached-alerts', JSON.stringify(alertsData));
+        localStorage.setItem('cached-notifications', JSON.stringify(notificationsData));
+        localStorage.setItem('cached-complaints', JSON.stringify(complaintsData));
+        localStorage.setItem('cached-donations', JSON.stringify(donationsData));
+        localStorage.setItem('cached-impactMetrics', JSON.stringify(metricsPayload.metrics));
+        localStorage.setItem('cached-portalImpacts', JSON.stringify(metricsPayload.entityImpact));
+      } catch (e) {
+        console.warn('Could not write to localStorage cache:', e);
+      }
+
       // Set fallback portal to Greenwood Residency
       if (portalsData.length > 0) {
         const defaultPortal = portalsData.find((p: any) => p.id === 'portal-1') || portalsData[0];
@@ -193,7 +223,42 @@ export default function App() {
       setLoggedInUser(defaultUser);
 
     } catch (err: any) {
-      console.error(err);
+      console.error('Fetch error, checking localStorage fallback:', err);
+      try {
+        const savedPortals = localStorage.getItem('cached-portals');
+        const savedUsers = localStorage.getItem('cached-users');
+        const savedAlerts = localStorage.getItem('cached-alerts');
+        const savedNotifications = localStorage.getItem('cached-notifications');
+        const savedComplaints = localStorage.getItem('cached-complaints');
+        const savedDonations = localStorage.getItem('cached-donations');
+        const savedImpactMetrics = localStorage.getItem('cached-impactMetrics');
+        const savedPortalImpacts = localStorage.getItem('cached-portalImpacts');
+
+        if (savedPortals && savedNotifications) {
+          const portalsData = JSON.parse(savedPortals);
+          const usersData = savedUsers ? JSON.parse(savedUsers) : [];
+          setPortals(portalsData);
+          setUsers(usersData);
+          if (savedAlerts) setAlerts(JSON.parse(savedAlerts));
+          setNotifications(JSON.parse(savedNotifications));
+          if (savedComplaints) setComplaints(JSON.parse(savedComplaints));
+          if (savedDonations) setDonations(JSON.parse(savedDonations));
+          if (savedImpactMetrics) setImpactMetrics(JSON.parse(savedImpactMetrics));
+          if (savedPortalImpacts) setPortalImpacts(JSON.parse(savedPortalImpacts));
+
+          if (portalsData.length > 0) {
+            const defaultPortal = portalsData.find((p: any) => p.id === 'portal-1') || portalsData[0];
+            setCurrentPortal(defaultPortal);
+          }
+          const defaultUser = usersData.find((u: any) => u.id === 'user-3') || null;
+          setLoggedInUser(defaultUser);
+
+          setErrorStatus("Running in Offline Cache Mode. Critical data remains visible.");
+          return;
+        }
+      } catch (cacheErr) {
+        console.error('Could not load offline cache:', cacheErr);
+      }
       setErrorStatus("Could not fetch data. Ensure your server.ts dev process completed setup on port 3000.");
     } finally {
       setLoading(false);
@@ -491,6 +556,22 @@ export default function App() {
       await refreshMetrics();
     } catch {
       alert("Claiming item failed");
+    }
+  };
+
+  // 7b. Schedule donation item pickup time slot
+  const handleSchedulePickup = async (id: string, slot: string) => {
+    try {
+      const res = await fetch(`/api/donations/${id}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pickupSlot: slot })
+      });
+      const doc = await res.json();
+      setDonations(prev => prev.map(d => d.id === id ? doc : d));
+      await refreshMetrics();
+    } catch {
+      alert("Scheduling pickup slot failed");
     }
   };
 
@@ -966,6 +1047,7 @@ export default function App() {
             <DonationHub 
               donations={donations}
               onClaimDonation={handleClaimDonation}
+              onSchedulePickup={handleSchedulePickup}
               loading={loading}
             />
           )}

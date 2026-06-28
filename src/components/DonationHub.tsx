@@ -74,12 +74,14 @@ const HUB_LOCATIONS: DonationHubLocation[] = [
 interface DonationHubProps {
   donations: DonationItem[];
   onClaimDonation: (id: string, ngoName: string) => Promise<void>;
+  onSchedulePickup?: (id: string, slot: string) => Promise<void>;
   loading: boolean;
 }
 
 export default function DonationHub({
   donations,
   onClaimDonation,
+  onSchedulePickup,
   loading
 }: DonationHubProps) {
   const [claimNgo, setClaimNgo] = useState('');
@@ -88,6 +90,8 @@ export default function DonationHub({
   const [filterCat, setFilterCat] = useState<'all' | 'clothes' | 'food' | 'books' | 'electronics' | 'others'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHubId, setSelectedHubId] = useState<string>('hub-1');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'available' | 'claimed'>('all');
+  const [historySearch, setHistorySearch] = useState('');
 
   // Interactive D3 floor-plan state & references
   const floorPlanContainerRef = useRef<SVGSVGElement | null>(null);
@@ -1032,6 +1036,59 @@ export default function DonationHub({
                     {donDoc.aiAudit}
                   </div>
                 )}
+                {/* Pickup Time Slot display/selection */}
+                <div className="bg-[#FAF8F2] border-2 border-black p-3 rounded-2xl text-xs font-bold space-y-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-zinc-650 flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5 text-[#7C3AED]" /> Pickup Slot:
+                    </span>
+                    {donDoc.pickupSlot ? (
+                      <span className="bg-emerald-100 text-emerald-800 border-2 border-emerald-400 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded">
+                        Scheduled
+                      </span>
+                    ) : (
+                      <span className="bg-amber-100 text-amber-850 border-2 border-amber-400 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded animate-pulse">
+                        Pending Slot
+                      </span>
+                    )}
+                  </div>
+                  {donDoc.pickupSlot ? (
+                    <p className="text-black font-extrabold text-[11px] uppercase bg-white border-2 border-black px-2 py-1 rounded">
+                      📅 {donDoc.pickupSlot}
+                    </p>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <select
+                        id={`slot-select-${donDoc.id}`}
+                        defaultValue=""
+                        className="flex-1 bg-white border-2 border-black rounded-lg px-2 py-1.5 text-[10px] font-extrabold text-black focus:outline-none"
+                      >
+                        <option value="" disabled>Select Time Slot</option>
+                        <option value="Monday 10:00 AM - 12:00 PM">Mon 10am - 12pm</option>
+                        <option value="Wednesday 2:00 PM - 4:00 PM">Wed 2pm - 4pm</option>
+                        <option value="Friday 11:00 AM - 1:00 PM">Fri 11am - 1pm</option>
+                        <option value="Saturday 3:00 PM - 5:00 PM">Sat 3pm - 5pm</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const selectEl = document.getElementById(`slot-select-${donDoc.id}`) as HTMLSelectElement;
+                          if (selectEl && selectEl.value) {
+                            if (onSchedulePickup) {
+                              await onSchedulePickup(donDoc.id, selectEl.value);
+                              alert(`Pickup scheduled for: ${selectEl.value}`);
+                            }
+                          } else {
+                            alert("Please select a valid slot first.");
+                          }
+                        }}
+                        className="bg-black hover:bg-zinc-800 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg border-2 border-black cursor-pointer shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0"
+                      >
+                        Book
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Claims Box */}
@@ -1088,6 +1145,148 @@ export default function DonationHub({
           ))}
         </div>
       )}
+
+      {/* 📜 Donation History Section */}
+      <div className="bg-white border-4 border-black rounded-3xl p-5 sm:p-7 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-6 mt-8">
+        <div>
+          <h3 className="text-sm sm:text-base font-black uppercase text-black flex items-center gap-2">
+            <span>📜</span> Community Donation History & NGO Match Log
+          </h3>
+          <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-tight">
+            Transparent audit ledger tracking past contributions, scheduled pickups, and successful NGO distributions.
+          </p>
+        </div>
+
+        {/* Filters for Donation History */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-dashed border-black pb-4">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-extrabold uppercase text-zinc-400 mr-1">Status:</span>
+            {(['all', 'available', 'claimed'] as const).map(st => (
+              <button
+                key={st}
+                onClick={() => setHistoryFilter(st)}
+                className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase border-2 transition-all cursor-pointer ${
+                  historyFilter === st
+                    ? 'bg-zinc-900 text-white border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]'
+                    : 'bg-[#FAF8F2] hover:bg-zinc-100 text-black border-zinc-300'
+                }`}
+              >
+                {st === 'all' ? 'All Logs' : st === 'claimed' ? 'Successfully Claimed' : 'Pending / Available'}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Input for history */}
+          <input
+            type="text"
+            placeholder="Filter history by donor name or item title..."
+            value={historySearch}
+            onChange={(e) => setHistorySearch(e.target.value)}
+            className="text-xs p-2 border-2 border-black rounded-xl bg-[#FAF8F2] text-black font-bold focus:outline-none focus:bg-white w-full sm:max-w-xs"
+          />
+        </div>
+
+        {/* History List or Table */}
+        {(() => {
+          const filteredHistory = donations.filter(item => {
+            // Status filter
+            if (historyFilter === 'claimed' && item.status !== 'claimed') return false;
+            if (historyFilter === 'available' && item.status !== 'available') return false;
+
+            // Search query filter
+            if (historySearch.trim()) {
+              const query = historySearch.toLowerCase();
+              const nameMatch = item.donorName?.toLowerCase().includes(query);
+              const titleMatch = item.title?.toLowerCase().includes(query);
+              const catMatch = item.category?.toLowerCase().includes(query);
+              if (!nameMatch && !titleMatch && !catMatch) return false;
+            }
+            return true;
+          });
+
+          if (filteredHistory.length === 0) {
+            return (
+              <div className="text-center py-8 bg-[#FAF8F2] border-2 border-dashed border-zinc-300 rounded-2xl space-y-2">
+                <span className="text-xl">📭</span>
+                <p className="text-xs font-black text-zinc-400 uppercase">No matching donation logs found in the ledger.</p>
+              </div>
+            );
+          }
+
+          return (
+            <div className="overflow-x-auto border-2 border-black rounded-2xl">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-zinc-900 text-white text-[9px] uppercase tracking-wider border-b-2 border-black">
+                    <th className="p-3 font-black">Date / ID</th>
+                    <th className="p-3 font-black">Donor Name</th>
+                    <th className="p-3 font-black">Donation Item Details</th>
+                    <th className="p-3 font-black">Category</th>
+                    <th className="p-3 font-black">Status / NGO Partner</th>
+                    <th className="p-3 font-black">Logistics Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200">
+                  {filteredHistory.map((item, idx) => {
+                    const isClaimed = item.status === 'claimed';
+                    const dateFormatted = item.createdAt 
+                      ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : '24 Jun 2026';
+
+                    return (
+                      <tr key={item.id} className={`hover:bg-amber-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-50/50'}`}>
+                        <td className="p-3">
+                          <span className="block font-bold text-zinc-800">{dateFormatted}</span>
+                          <span className="text-[9px] font-mono text-zinc-400 block uppercase font-bold">{item.id}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-extrabold text-black block">{item.donorName || "Dr. Alok Verma"}</span>
+                          <span className="text-[9px] font-mono text-zinc-500 block">{item.donorContact || "+91 91234-56789"}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-extrabold text-zinc-900 text-[12px] block">{item.title}</span>
+                          <span className="text-[10px] text-zinc-500 block">Quantity: <strong className="text-zinc-700 font-extrabold">{item.quantity}</strong></span>
+                        </td>
+                        <td className="p-3 capitalize">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-violet-100 text-violet-800 border border-violet-200">
+                            {item.category}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {isClaimed ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded text-[10px] font-black uppercase">
+                                <CheckCircle2 className="h-3 w-3" /> Claimed / Resolved
+                              </span>
+                              <span className="block text-[9px] font-bold text-zinc-500">Matched NGO: <strong className="text-zinc-800">{item.claimedByNGO || "Hope Foundation"}</strong></span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-black uppercase">
+                              ⏳ Available
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {item.pickupSlot ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 border border-indigo-300 px-2 py-0.5 rounded text-[9px] font-black uppercase">
+                                🚚 Pickup Scheduled
+                              </span>
+                              <span className="block text-[8px] font-bold text-indigo-700 font-mono leading-none">{item.pickupSlot}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase italic">Awaiting Slot Booking</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+      </div>
 
       {/* Footer advice */}
       <p className="text-center text-[10px] sm:text-xs font-bold text-zinc-500 leading-relaxed max-w-xl mx-auto pt-6 border-t-2 border-dashed border-zinc-200">

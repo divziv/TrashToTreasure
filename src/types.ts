@@ -75,6 +75,7 @@ export interface DonationItem {
   claimedByNGO?: string;
   createdAt: string;
   aiAudit?: string; // AI generated quality report or tags
+  pickupSlot?: string; // scheduled time slot for pickup
 }
 
 export interface ImpactMetrics {
