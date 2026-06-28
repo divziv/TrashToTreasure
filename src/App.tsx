@@ -641,7 +641,7 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tighter text-black">CommunityEco</h1>
+                <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tighter text-black">Trash To Treasure</h1>
                 <span className="bg-black text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                   {currentPortal.type} sector
                 </span>
@@ -1064,7 +1064,7 @@ export default function App() {
       {/* 4. Elegant Universal Footer with WCAG notice lines */}
       <footer className="bg-[#FAF8F2] text-black py-8 border-t-4 border-black text-xs text-center mt-12 font-bold uppercase tracking-widest">
         <div className="w-full max-w-7xl mx-auto px-4 space-y-3">
-          <p className="font-black text-sm text-[#7C3AED] uppercase">🌿 CommunityEco - Hyperlocal Garbage & Charity Management Network</p>
+          <p className="font-black text-sm text-[#7C3AED] uppercase">🌿 Trash To Treasure - Hyperlocal Garbage & Charity Management Network</p>
           <p className="max-w-2xl mx-auto text-[11px] leading-relaxed">
             Engineered using fully modular components and server-side model auditing. Backed by automated facial biometrics bypasses alongside auditory screen read narration protocols to guarantee equal, dignified opportunities to all people.
           </p>

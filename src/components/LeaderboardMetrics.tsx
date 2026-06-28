@@ -588,7 +588,7 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
 
     const pendingCount = complaints ? complaints.filter(c => c.status === 'open' || c.status === 'investigating').length : 0;
     
-    const text = `Three overlapping community zones detected. Highest efficiency cluster lies between Central Apartments, Tech Park Office Block, and City University North Campus. Community Eco daily summary. Cumulative waste managed is ${metrics.totalWasteCollectedKg} kilograms. We have saved ${metrics.carbonSavedKg} kilograms of carbon emissions, and saved ${metrics.landfillDivertedKg} kilograms of waste from landfills. There are currently ${pendingCount} pending community complaints requiring worker dispatch. Thank you for keeping our community clean.`;
+    const text = `Three overlapping community zones detected. Highest efficiency cluster lies between Central Apartments, Tech Park Office Block, and City University North Campus. Trash To Treasure daily summary. Cumulative waste managed is ${metrics.totalWasteCollectedKg} kilograms. We have saved ${metrics.carbonSavedKg} kilograms of carbon emissions, and saved ${metrics.landfillDivertedKg} kilograms of waste from landfills. There are currently ${pendingCount} pending community complaints requiring worker dispatch. Thank you for keeping our community clean.`;
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);

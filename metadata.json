@@ -1,5 +1,5 @@
 {
-  "name": "Hyperlocal Waste & Donation Portal",
+  "name": "Trash To Treasure",
   "description": "A comprehensive collaborative waste tracker, floor alerting system, and donation hub tailored for apartments, universities, and offices, complete with accessibility modes.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

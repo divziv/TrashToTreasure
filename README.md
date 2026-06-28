@@ -1,4 +1,4 @@
-# 🌿 CommunityEco - Hyperlocal Waste Management & Charity Matching Network
+# 🌿 Trash To Treasure - Hyperlocal Waste Management & Charity Matching Network
 
 An inclusive, WCAG 2.1 compliance-rated, full-stack application for managing household waste collection floor-by-floor and matching citizen resource surplus (clothing, blank books, food canisters) with neighborhood shelters. 
 

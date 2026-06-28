@@ -90,7 +90,7 @@ export default function SupervisorPanel({
 
       ctx.fillStyle = '#000000';
       ctx.font = '900 21px sans-serif';
-      ctx.fillText('COMMUNITYECO COMPLIANCE & ENVIRONMENTAL AUDIT', 60, 80);
+      ctx.fillText('TRASH TO TREASURE COMPLIANCE & ENVIRONMENTAL AUDIT', 60, 80);
       ctx.font = 'bold 11px monospace';
       ctx.fillText(`OFFICIAL ADMINISTRATIVE SUMMARY REPORT // PORTAL: ${currentPortal.name.toUpperCase()}`, 60, 115);
 
@@ -295,7 +295,7 @@ export default function SupervisorPanel({
 
       // Save PNG
       const link = document.createElement('a');
-      link.download = `CommunityEco_Compliance_Report_${currentPortal.name.replace(/\s+/g, '_')}.png`;
+      link.download = `TrashToTreasure_Compliance_Report_${currentPortal.name.replace(/\s+/g, '_')}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
       
@@ -679,7 +679,7 @@ export default function SupervisorPanel({
             {/* Generated QR Card Visual & Simulated Placard */}
             <div className="border-3 border-black rounded-2xl bg-[#FAF8F2] p-4 flex flex-col items-center justify-center space-y-3 relative shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
               <span className="absolute top-1.5 left-1.5 text-[7px] font-mono font-black text-zinc-400 bg-white border border-dashed border-zinc-300 px-1.5 py-0.5 rounded uppercase">
-                PLACARD ACTIVE - communityeco.app
+                PLACARD ACTIVE - trashtotreasure.app
               </span>
               
               {/* Clean, detailed procedural vector graphics rendering of the QR Code */}
