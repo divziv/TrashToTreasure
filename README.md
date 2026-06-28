@@ -121,3 +121,5 @@ npm start
 *   **Participation Rating**: Ratio of active logins or alerts published relative to flat count.
 
 *Designed with ❤️ for inclusive, clean, and sustainable hyperlocal neighborhoods.*
+
+App Link: https://ai.studio/apps/04e84d1b-2047-4b47-8bfe-488345090054?fullscreenApplet=true
