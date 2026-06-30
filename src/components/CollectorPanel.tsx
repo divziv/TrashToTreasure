@@ -100,6 +100,51 @@ export default function CollectorPanel({
     }, 1500);
   };
 
+  // Generate dynamic, realistic QR matrix pseudo-patterns for disposal bins
+  const getQrMatrixPattern = (floor: number, type: string) => {
+    const seed = (floor * 17 + type.charCodeAt(0) * 23) % 1000;
+    const size = 15;
+    const matrix: boolean[][] = [];
+    
+    const isMarker = (r: number, c: number) => {
+      if (r < 4 && c < 4) return true; // Top-Left
+      if (r < 4 && c >= size - 4) return true; // Top-Right
+      if (r >= size - 4 && c < 4) return true; // Bottom-Left
+      return false;
+    };
+
+    const isWhiteMarkerInner = (r: number, c: number) => {
+      if ((r === 1 || r === 2) && (c === 1 || c === 2)) return false;
+      if (r === 0 || r === 3 || c === 0 || c === 3) {
+        if (r < 4 && c < 4) return true;
+      }
+      if (r === 0 || r === 3 || c === size - 1 || c === size - 4) {
+        if (r < 4 && c >= size - 4) return true;
+      }
+      if (r === size - 1 || r === size - 4 || c === 0 || c === 3) {
+        if (r >= size - 4 && c < 4) return true;
+      }
+      return false;
+    };
+
+    for (let r = 0; r < size; r++) {
+      const row = [];
+      for (let c = 0; c < size; c++) {
+        if (isWhiteMarkerInner(r, c)) {
+          row.push(false);
+        } else if (isMarker(r, c)) {
+          row.push(true);
+        } else {
+          // Semi-random deterministic pattern based on seed and coordinates
+          const val = ((r * c + r * 7 + c * 11 + seed) % 5) === 0 || ((r + c + seed) % 3) === 0;
+          row.push(val);
+        }
+      }
+      matrix.push(row);
+    }
+    return matrix;
+  };
+
   const handleScanPresetBin = (binId: string, floorNum: number, catName: string) => {
     setQrScanning(true);
     setScannedBinId(null);
@@ -577,29 +622,114 @@ export default function CollectorPanel({
                     </button>
                   </div>
 
-                  {/* Preset Simulation scan targets */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-black uppercase text-zinc-500 block">Tap simulation QR target to test scan:</span>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Dynamic Disposal Bins Interactive QR Directory */}
+                  <div className="space-y-3 pt-2 border-t border-black/10">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-indigo-950 flex items-center gap-1">
+                        <QrCode className="h-4 w-4 text-emerald-600" />
+                        Live Disposal Bin QR Code Stickers (Floor {selectedFloor})
+                      </span>
+                      <span className="text-[9px] font-black uppercase bg-emerald-100 border border-black px-2 py-0.5 rounded text-emerald-800">
+                        3 Unique Bins Generated
+                      </span>
+                    </div>
+                    
+                    <p className="text-[10px] text-zinc-500 font-bold leading-relaxed">
+                      Below are the registered high-fidelity QR badges mounted on Floor {selectedFloor}'s physical sorting containers. Click <strong>"⚡ Simulate Scan"</strong> to auto-fill the biometric logger instantly.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {[
-                        { id: 'BIN-F1-ORG-892', floor: 1, cat: 'Organic Compostables' },
-                        { id: 'BIN-F2-DRY-304', floor: 2, cat: 'Dry Recyclables' },
-                        { id: 'BIN-F3-HAZ-411', floor: 3, cat: 'Hazardous E-Waste' }
-                      ].map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          disabled={qrScanning}
-                          onClick={() => handleScanPresetBin(preset.id, preset.floor, preset.cat)}
-                          className="p-2 border border-black bg-white hover:bg-amber-100 rounded-xl text-left cursor-pointer transition-colors"
-                        >
-                          <div className="flex items-center gap-1">
-                            <QrCode className="h-3.5 w-3.5 text-zinc-600" />
-                            <span className="font-mono text-[9px] font-black">{preset.id}</span>
+                        { 
+                          type: 'organic', 
+                          cat: 'Organic Compostables', 
+                          id: `BIN-F${selectedFloor}-ORG-${(selectedFloor * 11 + 25) % 1000}`, 
+                          color: '#10B981', 
+                          bg: 'bg-emerald-50' 
+                        },
+                        { 
+                          type: 'dry', 
+                          cat: 'Dry Recyclables', 
+                          id: `BIN-F${selectedFloor}-DRY-${(selectedFloor * 17 + 82) % 1000}`, 
+                          color: '#0EA5E9', 
+                          bg: 'bg-sky-50' 
+                        },
+                        { 
+                          type: 'hazardous', 
+                          cat: 'Hazardous E-Waste', 
+                          id: `BIN-F${selectedFloor}-HAZ-${(selectedFloor * 23 + 41) % 1000}`, 
+                          color: '#F59E0B', 
+                          bg: 'bg-amber-50' 
+                        }
+                      ].map((bin) => {
+                        const matrix = getQrMatrixPattern(selectedFloor, bin.type);
+                        
+                        return (
+                          <div 
+                            key={bin.id} 
+                            className={`border-2 border-black rounded-2xl p-3 ${bin.bg} shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between space-y-3 relative overflow-hidden group`}
+                          >
+                            {/* QR Placard Sticker Header */}
+                            <div className="text-center pb-1.5 border-b border-black/10">
+                              <span className="text-[7px] font-mono font-black text-zinc-400 block tracking-tighter">
+                                TRASH TO TREASURE BAGGAGE v2
+                              </span>
+                            </div>
+
+                            {/* Procedural SVG vector QR Code rendering */}
+                            <div className="flex justify-center py-1">
+                              <div className="bg-white p-2 border border-black rounded-lg shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] group-hover:scale-105 transition-transform">
+                                <svg width="70" height="70" viewBox="0 0 15 15" className="text-black">
+                                  {matrix.map((row, rIdx) => 
+                                    row.map((cell, cIdx) => cell ? (
+                                      <rect 
+                                        key={`${rIdx}-${cIdx}`} 
+                                        x={cIdx} 
+                                        y={rIdx} 
+                                        width="1" 
+                                        height="1" 
+                                        fill="currentColor" 
+                                      />
+                                    ) : null)
+                                  )}
+                                </svg>
+                              </div>
+                            </div>
+
+                            {/* Bin Tag Identification */}
+                            <div className="text-center space-y-0.5">
+                              <span 
+                                className="text-[8px] font-black uppercase text-white px-2 py-0.5 rounded border border-black block text-center truncate"
+                                style={{ backgroundColor: bin.color }}
+                              >
+                                {bin.cat}
+                              </span>
+                              <p className="text-[9px] font-mono font-black text-zinc-700 bg-white border border-black px-1.5 rounded inline-block">
+                                {bin.id}
+                              </p>
+                            </div>
+
+                            {/* Collector Quick Scanning Workflow Actions */}
+                            <div className="pt-1 space-y-1.5">
+                              <button
+                                type="button"
+                                disabled={qrScanning}
+                                onClick={() => handleScanPresetBin(bin.id, selectedFloor, bin.cat)}
+                                className="w-full bg-[#10B981] hover:bg-[#059669] text-white border-2 border-black py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                              >
+                                ⚡ Simulate Scan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => alert(`Sticker label print job dispatched for ${bin.id} to Floor ${selectedFloor} printer!`)}
+                                className="w-full bg-white hover:bg-zinc-50 text-black border-2 border-black py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5"
+                              >
+                                🖨️ Print Badge
+                              </button>
+                            </div>
                           </div>
-                          <span className="text-[8px] font-bold text-zinc-400 block mt-0.5">{preset.cat} (Floor {preset.floor})</span>
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

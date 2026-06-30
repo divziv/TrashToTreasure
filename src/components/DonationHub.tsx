@@ -19,7 +19,7 @@ import {
   Zap,
   Info
 } from 'lucide-react';
-import { DonationItem } from '../types';
+import { DonationItem, Portal } from '../types';
 import { DEFAULT_GEO_ENTITIES, computeIntersections, generateSmartInsights } from '../utils/geoEngine';
 
 interface DonationHubLocation {
@@ -35,7 +35,7 @@ interface DonationHubLocation {
 const HUB_LOCATIONS: DonationHubLocation[] = [
   {
     id: 'hub-1',
-    name: 'Sector Greenfield Central HQ',
+    name: 'Sector Greenfield Central HQ NGO',
     lat: 12.9716,
     lng: 77.5946,
     address: 'Near Central Library Circle, Sector-1',
@@ -44,7 +44,7 @@ const HUB_LOCATIONS: DonationHubLocation[] = [
   },
   {
     id: 'hub-2',
-    name: 'Lakeside Compost & Bio-reactor Vault',
+    name: 'Lakeside Compost & Bio-reactor Vault NGO',
     lat: 12.9825,
     lng: 77.6083,
     address: 'Lake Bund Road, Adjacent water filter station',
@@ -62,7 +62,7 @@ const HUB_LOCATIONS: DonationHubLocation[] = [
   },
   {
     id: 'hub-4',
-    name: 'E-Waste & Electronics Reclamation Vault',
+    name: 'E-Waste & Electronics Reclamation Vault NGO',
     lat: 12.9515,
     lng: 77.6101,
     address: 'Industrial Sector 5 Loop Road',
@@ -76,13 +76,15 @@ interface DonationHubProps {
   onClaimDonation: (id: string, ngoName: string) => Promise<void>;
   onSchedulePickup?: (id: string, slot: string) => Promise<void>;
   loading: boolean;
+  currentPortal?: Portal | null;
 }
 
 export default function DonationHub({
   donations,
   onClaimDonation,
   onSchedulePickup,
-  loading
+  loading,
+  currentPortal
 }: DonationHubProps) {
   const [claimNgo, setClaimNgo] = useState('');
   const [selectedDonId, setSelectedDonId] = useState<string | null>(null);
@@ -92,6 +94,21 @@ export default function DonationHub({
   const [selectedHubId, setSelectedHubId] = useState<string>('hub-1');
   const [historyFilter, setHistoryFilter] = useState<'all' | 'available' | 'claimed'>('all');
   const [historySearch, setHistorySearch] = useState('');
+
+  // Determine user's active home portal coordinate reference dynamically
+  const activePortalEntity = DEFAULT_GEO_ENTITIES.find(e => 
+    e.name.toLowerCase().includes(currentPortal?.name.toLowerCase() || 'greenwood') ||
+    currentPortal?.name.toLowerCase().includes(e.name.toLowerCase()) ||
+    e.roleType.toLowerCase() === currentPortal?.type.toLowerCase()
+  ) || DEFAULT_GEO_ENTITIES[0];
+
+  const homeLat = activePortalEntity.centerLat;
+  const homeLng = activePortalEntity.centerLng;
+  const homeName = currentPortal?.name || activePortalEntity.name;
+
+  // Map home coordinates to SVG grid percentage space (matching the static hub domain limits)
+  const homeX = ((homeLng - 77.5800) / 0.0400) * 100;
+  const homeY = (1 - (homeLat - 12.9500) / 0.0400) * 100;
 
   // Interactive D3 floor-plan state & references
   const floorPlanContainerRef = useRef<SVGSVGElement | null>(null);
@@ -502,6 +519,38 @@ export default function DonationHub({
                 ★ High Efficiency Donation Cluster
               </text>
 
+              {/* Dynamic Connecting Route Lines to NGOs from user's current home portal */}
+              {HUB_LOCATIONS.map(hub => {
+                const x = ((hub.lng - 77.5800) / 0.0400) * 100;
+                const y = (1 - (hub.lat - 12.9500) / 0.0400) * 100;
+                const isSelected = selectedHubId === hub.id;
+                
+                return (
+                  <g key={`route-${hub.id}`}>
+                    <line 
+                      x1={`${homeX}%`} 
+                      y1={`${homeY}%`} 
+                      x2={`${x}%`} 
+                      y2={`${y}%`} 
+                      stroke={isSelected ? "#EC4899" : "#10B981"} 
+                      strokeWidth={isSelected ? 3.5 : 1.5} 
+                      strokeDasharray={isSelected ? "6 3" : "4 4"}
+                      className={isSelected ? "animate-pulse" : "opacity-50"}
+                    />
+                    {/* Pulsing indicator at the halfway point showing distance */}
+                    {isSelected && (
+                      <circle 
+                        cx={`${(homeX + x) / 2}%`} 
+                        cy={`${(homeY + y) / 2}%`} 
+                        r="3" 
+                        fill="#EC4899" 
+                        className="animate-ping" 
+                      />
+                    )}
+                  </g>
+                );
+              })}
+
               {/* Coordinate Labels */}
               <text x="4" y="12" className="text-[7.5px] font-mono fill-zinc-400 font-extrabold">lat: 12.9900 | lng: 77.5800</text>
               <text x="4" y="96" className="text-[7.5px] font-mono fill-zinc-400 font-extrabold">lat: 12.9500 | lng: 77.5800</text>
@@ -536,10 +585,27 @@ export default function DonationHub({
               );
             })}
 
+            {/* User Home Portal Marker Node Overlay */}
+            <div
+              className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none z-10"
+              style={{ left: `${homeX}%`, top: `${homeY}%` }}
+            >
+              <div className="p-2 rounded-full bg-rose-500 border-2 border-black text-white animate-bounce shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <Gift className="h-4 w-4 text-yellow-300" />
+              </div>
+              <span className="mt-1 text-[9px] font-black px-2 py-0.5 rounded-xl border-2 border-black bg-rose-600 text-white select-none whitespace-nowrap shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1 uppercase">
+                <span className="h-2 w-2 rounded-full bg-green-400 inline-block animate-ping"></span>
+                <span>My Portal: {homeName.split(' ')[0]}</span>
+              </span>
+            </div>
+
             {/* Home Portal Legend Overlay */}
             <div className="absolute bottom-3 left-3 bg-white/95 border-2 border-black px-2.5 py-1.5 rounded-xl font-black text-[9px] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5 uppercase">
-              <span className="h-3 w-3 rounded-full bg-[#F43F5E] border-2 border-white inline-block animate-pulse"></span>
-              <span>Central Interaction Centroid</span>
+              <span className="h-3 w-3 rounded-full bg-rose-500 border-2 border-white inline-block animate-ping"></span>
+              <span>Portal Origin ({homeName.split(' ')[0]})</span>
+              <span className="h-3 w-1 border-l-2 border-black mx-1"></span>
+              <span className="h-3 w-3 rounded-full bg-[#10B981] border-2 border-white inline-block"></span>
+              <span>NGO Route</span>
             </div>
           </div>
 
@@ -548,9 +614,9 @@ export default function DonationHub({
           <div className="lg:col-span-2 space-y-4 flex flex-col justify-between">
             {(() => {
               const activeHub = HUB_LOCATIONS.find(h => h.id === selectedHubId) || HUB_LOCATIONS[0];
-              // Euclidean distance approximation: Delta lat/lng in degrees mapped to km (approx 111.3km per degree)
-              const dLat = activeHub.lat - 12.9720;
-              const dLng = activeHub.lng - 77.5990;
+              // Dynamic distance calculation relative to the user's active home portal coordinate reference
+              const dLat = activeHub.lat - homeLat;
+              const dLng = activeHub.lng - homeLng;
               const distanceKm = Math.sqrt(dLat * dLat + dLng * dLng) * 111.3;
               
               return (

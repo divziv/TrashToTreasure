@@ -1049,6 +1049,7 @@ export default function App() {
               onClaimDonation={handleClaimDonation}
               onSchedulePickup={handleSchedulePickup}
               loading={loading}
+              currentPortal={currentPortal}
             />
           )}
 

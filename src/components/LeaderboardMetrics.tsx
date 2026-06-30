@@ -5,6 +5,8 @@ import {
   ResponsiveContainer, 
   LineChart, 
   Line, 
+  BarChart,
+  Bar,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -137,6 +139,33 @@ export default function LeaderboardMetrics({
         name: formattedDate,
         'Wet Waste (Kg)': Math.max(2, Math.round(baseWet + noiseWet)),
         'Dry Recyclables (Kg)': Math.max(3, Math.round(baseDry + noiseDry)),
+      });
+    }
+    return data;
+  };
+
+  // Generate 8 weeks of historical weekly trend data of total weight diverted from landfills
+  const generateWeeklyLandfillDivertedData = () => {
+    const data = [];
+    const baseDiverted = metrics ? Math.round((metrics.landfillDivertedKg * multiplier) / 4.3) : 150; // Base weekly diversion in kg
+    
+    for (let i = 7; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - (i * 7));
+      const startOfWeek = new Date(date);
+      startOfWeek.setDate(date.getDate() - date.getDay() + 1); // Monday
+      const formattedDate = startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      // Weekly sinusoidal trend with minor noise
+      const trendFactor = 1 + Math.sin(i * 0.8) * 0.15;
+      const noise = (Math.random() - 0.5) * 15;
+      const divertedVal = Math.max(20, Math.round(baseDiverted * trendFactor + noise));
+      const targetVal = Math.round(divertedVal * 1.12); // Total generated weekly waste target
+      
+      data.push({
+        name: `Wk of ${formattedDate}`,
+        'Diverted (Kg)': divertedVal,
+        'Landfill Goal (Kg)': Math.round(targetVal * 0.95),
       });
     }
     return data;
@@ -1163,6 +1192,77 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
                 dot={{ stroke: '#000', strokeWidth: 1.5, r: 4 }}
               />
             </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 📈 Weekly Landfill Diversion Trends (Recharts) */}
+      <div className="bg-white border-4 border-black p-4 sm:p-6 rounded-3xl shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <FlameKindling className="h-6 w-6 text-emerald-600 animate-pulse" />
+            <div>
+              <h3 className="text-md sm:text-lg font-black uppercase tracking-tight text-black">♻️ Weekly Landfill Diversion Trends</h3>
+              <p className="text-[10px] sm:text-xs font-bold text-zinc-550">Historical weekly audit of total garbage weight successfully diverted from landfills into circular economy channels.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-black uppercase text-white bg-emerald-600 px-3 py-1.5 rounded-xl border-2 border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
+            <Sparkles className="h-4 w-4 text-yellow-300 animate-spin" />
+            <span>Target Achieved: 98.2%</span>
+          </div>
+        </div>
+
+        <div className="h-[280px] w-full border-4 border-black rounded-2xl bg-[#FAF8F2]/30 p-2 sm:p-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={generateWeeklyLandfillDivertedData()}
+              margin={{ top: 15, right: 10, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }} 
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <YAxis 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }}
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <RechartsTooltip 
+                contentStyle={{
+                  backgroundColor: '#FAF8F2',
+                  border: '3px solid #000',
+                  borderRadius: '12px',
+                  fontWeight: 'bold',
+                  fontSize: '11px',
+                  boxShadow: '2px 2px 0px 0px rgba(0,0,0,1)'
+                }}
+              />
+              <RechartsLegend 
+                wrapperStyle={{
+                  fontSize: '10px',
+                  fontWeight: 'black',
+                  textTransform: 'uppercase',
+                  paddingTop: '10px'
+                }}
+              />
+              <Bar 
+                dataKey="Diverted (Kg)" 
+                fill="#10B981" // emerald-500
+                stroke="#000"
+                strokeWidth={2}
+                radius={[4, 4, 0, 0]}
+              />
+              <Bar 
+                dataKey="Landfill Goal (Kg)" 
+                fill="#8B5CF6" // violet-500
+                stroke="#000"
+                strokeWidth={2}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
