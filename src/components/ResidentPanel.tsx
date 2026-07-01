@@ -28,6 +28,7 @@ import {
   FlatAlertNotification, 
   User 
 } from '../types';
+import AchievementBadges from './AchievementBadges';
 
 interface ResidentPanelProps {
   currentPortal: Portal;
@@ -37,6 +38,7 @@ interface ResidentPanelProps {
   onSubmitComplaint: (compData: Partial<Complaint>) => Promise<void>;
   onSubmitDonation: (donData: Partial<DonationItem>) => Promise<void>;
   loading: boolean;
+  complaints?: Complaint[];
 }
 
 export default function ResidentPanel({
@@ -46,7 +48,8 @@ export default function ResidentPanel({
   donations,
   onSubmitComplaint,
   onSubmitDonation,
-  loading
+  loading,
+  complaints
 }: ResidentPanelProps) {
   // Navigation inside panel
   const [activeTab, setActiveTab] = useState<'notifs' | 'complaints' | 'donate' | 'ledger'>('notifs');
@@ -886,293 +889,21 @@ export default function ResidentPanel({
           progressPercent = 100;
         }
 
-        const badgesList = [
-          {
-            id: 'carbon_crusher',
-            name: 'Carbon Crusher',
-            desc: 'Mitigate > 10 Kg of carbon output',
-            icon: '🌿',
-            unlocked: totalCO2 > 10,
-            color: 'border-emerald-500 bg-emerald-50'
-          },
-          {
-            id: 'literary_angel',
-            name: 'Literary Angel',
-            desc: 'Donate educational books',
-            icon: '📖',
-            unlocked: ledger.some(item => item.category.toLowerCase().includes('book')),
-            color: 'border-cyan-500 bg-cyan-50'
-          },
-          {
-            id: 'thread_spinner',
-            name: 'Thread Spinner',
-            desc: 'Donate clothes to prevent textile dumps',
-            icon: '👕',
-            unlocked: ledger.some(item => item.category.toLowerCase().includes('cloth')),
-            color: 'border-pink-500 bg-pink-50'
-          },
-          {
-            id: 'pantry_guard',
-            name: 'Pantry Guard',
-            desc: 'Supply organic dry food kits',
-            icon: '🍎',
-            unlocked: ledger.some(item => item.category.toLowerCase().includes('food')),
-            color: 'border-amber-500 bg-amber-50'
-          },
-          {
-            id: 'circuit_saver',
-            name: 'Circuit Saver',
-            desc: 'Securely recycle electronics items',
-            icon: '🔋',
-            unlocked: ledger.some(item => item.category.toLowerCase().includes('electron')),
-            color: 'border-teal-500 bg-teal-50'
-          },
-          {
-            id: 'recycle_rookie',
-            name: 'Recycle Rookie',
-            desc: 'Make at least 1 successful donation',
-            icon: '🥚',
-            unlocked: ledger.length >= 1,
-            color: 'border-orange-400 bg-orange-50'
-          },
-          {
-            id: 'eco_enthusiast',
-            name: 'Eco Enthusiast',
-            desc: 'Process 3 or more successful donations',
-            icon: '🌱',
-            unlocked: ledger.length >= 3,
-            color: 'border-green-400 bg-green-50'
-          },
-          {
-            id: 'green_guardian',
-            name: 'Green Guardian',
-            desc: 'Process 4 or more successful donations',
-            icon: '🛡️',
-            unlocked: ledger.length >= 4,
-            color: 'border-blue-400 bg-blue-50'
-          },
-          {
-            id: 'eco_warrior',
-            name: 'Eco-Warrior',
-            desc: 'Process 5 or more successful donations!',
-            icon: '⚔️',
-            unlocked: ledger.length >= 5,
-            color: 'border-purple-500 bg-purple-50 text-purple-900 font-extrabold'
-          }
-        ];
+        const resolvedComplaintsCount = complaints
+          ? complaints.filter(c => c.userName === loggedInUser?.name && c.status === 'resolved').length
+          : 1;
 
         return (
-          <div className="bg-white border-4 border-black rounded-3xl p-4 sm:p-6 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Level and XP Section */}
-            <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
-              <div className="space-y-1">
-                <span className="bg-black text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md">
-                  Greenwood Society Eco-Points
-                </span>
-                <h3 className="text-xl font-black text-black uppercase tracking-tight pt-1 flex items-center gap-1.5">
-                  <Award className="h-5.5 w-5.5 text-amber-500 animate-bounce" />
-                  Community Hero Profile
-                </h3>
-                <p className="text-xs font-bold text-zinc-500">Every positive donation or correct disposal action boosts your public impact levels.</p>
-              </div>
-
-              {/* Progress and status */}
-              <div className="bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-9 w-9 rounded-xl bg-[#FFD700] border-2 border-black flex items-center justify-center text-md font-black text-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
-                      {level}
-                    </span>
-                    <div>
-                      <h4 className="text-xs font-black uppercase text-black">{levelTitle}</h4>
-                      <p className="text-[10px] font-bold text-zinc-500">Tier Level {level}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-mono font-black text-black">{totalXP} XP</span>
-                    <p className="text-[10px] font-bold text-zinc-500">Next level at {nextThreshold} XP</p>
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="space-y-1">
-                  <div className="w-full bg-zinc-200 border-2 border-black h-4 rounded-full overflow-hidden p-0.5">
-                    <div 
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-1000 border-r border-black" 
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[9px] font-black text-zinc-500 uppercase">
-                    <span>Progress: {progressPercent}%</span>
-                    <span>{nextThreshold - totalXP > 0 ? `${nextThreshold - totalXP} XP left` : 'Max Level Reached'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 🌿 Sustainability Streak Card */}
-              <div className="bg-[#FAF8F2] border-2 border-black p-3.5 rounded-2xl shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] space-y-2 relative overflow-hidden text-left">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-md">🔥</span>
-                    <h4 className="text-[11px] font-black uppercase text-black">Eco-Sustainability Streak</h4>
-                  </div>
-                  <span className="bg-orange-100 text-orange-800 border border-orange-400 text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span className="animate-pulse">🔴</span> LIVE STREAK
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3.5 bg-white border border-black p-2.5 rounded-xl">
-                  <div className="relative h-12 w-12 bg-orange-100 border-2 border-orange-500 rounded-full flex items-center justify-center text-xl shadow-inner shrink-0">
-                    {ecoStreak >= 10 ? '🌸' : ecoStreak >= 5 ? '☘️' : ecoStreak >= 1 ? '🌿' : '🌱'}
-                    {/* Burning flame icon overlays */}
-                    <span className="absolute bottom-[-4px] right-[-4px] bg-white border border-black rounded-full p-0.5 text-[10px] leading-none">
-                      🔥
-                    </span>
-                  </div>
-
-                  <div className="flex-1 space-y-0.5">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-black font-mono text-orange-600">{ecoStreak}</span>
-                      <span className="text-[10px] font-black text-zinc-500 uppercase">Consecutive Days</span>
-                    </div>
-                    <p className="text-[9px] font-bold text-zinc-400 leading-tight">
-                      {ecoStreak >= 10 ? "Flourishing Eco-Legend status! Keep up the incredible daily resource recovery!" :
-                       ecoStreak >= 5 ? "Healthy sapling stage! You are building deep, resilient environmental habits." :
-                       "Keep sorting and recycling daily to see your tree grow!"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Growth Stages bar representation */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[8px] font-extrabold text-zinc-400 uppercase leading-none">
-                    <span>🌱 Seed</span>
-                    <span>🌿 Sprout</span>
-                    <span>☘️ Sapling</span>
-                    <span>🌸 Tree</span>
-                  </div>
-                  <div className="w-full bg-zinc-200 border border-black h-2.5 rounded-full overflow-hidden p-0.5 flex gap-0.5">
-                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 1 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
-                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 3 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
-                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 5 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
-                    <div className={`h-full rounded-full transition-all ${ecoStreak >= 10 ? 'bg-emerald-500' : 'bg-transparent'}`} style={{ width: '25%' }} />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleIncrementStreak}
-                  disabled={hasLoggedToday}
-                  className={`w-full py-1.5 border border-black rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                    hasLoggedToday 
-                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed' 
-                      : 'bg-[#FFD700] hover:bg-amber-400 text-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer'
-                  }`}
-                >
-                  {hasLoggedToday ? '✓ Activity Logged for Today' : '⚡ Log Daily Eco-Activity'}
-                </button>
-              </div>
-            </div>
-
-            {/* Badges Earned Section */}
-            <div className="lg:col-span-7 flex flex-col justify-between space-y-3">
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1">
-                  🏅 Stewardship Badges ({badgesList.filter(b => b.unlocked).length} / {badgesList.length})
-                </h4>
-                <p className="text-[11px] font-bold text-zinc-500">Earn credentials by participating in different categories of resource recovery.</p>
-              </div>
-
-              {/* 🏆 Sustainability Rank Widget */}
-              {(() => {
-                const donCount = ledger.length;
-                let rankTitle = "Recycle Rookie";
-                let rankIcon = "🥚";
-                let nextRank = "Eco Enthusiast";
-                let leftToNext = 3 - donCount;
-                let rankColor = "bg-orange-100 border-orange-400 text-orange-950";
-                let progress = (donCount / 3) * 100;
-                
-                if (donCount >= 5) {
-                  rankTitle = "Eco-Warrior";
-                  rankIcon = "⚔️";
-                  nextRank = "Max Rank Unlocked";
-                  leftToNext = 0;
-                  rankColor = "bg-purple-100 border-purple-400 text-purple-950";
-                  progress = 100;
-                } else if (donCount >= 4) {
-                  rankTitle = "Green Guardian";
-                  rankIcon = "🛡️";
-                  nextRank = "Eco-Warrior";
-                  leftToNext = 1;
-                  rankColor = "bg-blue-100 border-blue-400 text-blue-950";
-                  progress = (donCount / 5) * 100;
-                } else if (donCount >= 3) {
-                  rankTitle = "Eco Enthusiast";
-                  rankIcon = "🌱";
-                  nextRank = "Green Guardian";
-                  leftToNext = 1;
-                  rankColor = "bg-green-100 border-green-400 text-green-950";
-                  progress = (donCount / 4) * 100;
-                }
-
-                return (
-                  <div className={`p-3 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3 ${rankColor}`}>
-                    <div className="h-10 w-10 rounded-xl bg-white border-2 border-black flex items-center justify-center text-xl shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] shrink-0">
-                      {rankIcon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-black uppercase tracking-wider opacity-75">Sustainability Rank</span>
-                        <span className="text-[8px] font-mono font-black bg-black text-white px-1.5 py-0.5 rounded leading-none">
-                          {donCount} Donations
-                        </span>
-                      </div>
-                      <h5 className="text-xs font-black uppercase tracking-tight">{rankTitle}</h5>
-                      
-                      {/* Progress Bar */}
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="flex-1 bg-white/60 border border-black/20 h-2 rounded-full overflow-hidden p-0.5">
-                          <div className="bg-black h-full rounded-full transition-all" style={{ width: `${progress}%` }} />
-                        </div>
-                        <span className="text-[8px] font-black uppercase whitespace-nowrap">
-                          {leftToNext > 0 ? `${leftToNext} more to ${nextRank}` : 'Master Rank'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {badgesList.map(badge => (
-                  <div 
-                    key={badge.id}
-                    className={`p-2 rounded-xl border-2 transition-all relative group flex flex-col items-center text-center justify-center space-y-1 h-[90px] ${
-                      badge.unlocked 
-                        ? `${badge.color} border-black shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)]` 
-                        : 'border-zinc-200 bg-zinc-50 opacity-40 grayscale'
-                    }`}
-                    title={badge.desc}
-                  >
-                    <span className="text-xl" role="img" aria-label={badge.name}>
-                      {badge.icon}
-                    </span>
-                    <span className="text-[10px] font-black text-black uppercase tracking-tight block">
-                      {badge.name}
-                    </span>
-                    <span className="text-[8px] font-bold text-zinc-500 leading-none line-clamp-1">
-                      {badge.unlocked ? 'Unlocked' : 'Locked'}
-                    </span>
-
-                    {/* Simple Tooltip on hover */}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 text-white text-[9px] py-1 px-2 rounded-md font-bold w-40 z-20 shadow-md text-center">
-                      {badge.desc}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <AchievementBadges
+            ledger={ledger}
+            ecoStreak={ecoStreak}
+            resolvedComplaintsCount={resolvedComplaintsCount}
+            totalXP={totalXP}
+            level={level}
+            levelTitle={levelTitle}
+            progressPercent={progressPercent}
+            nextThreshold={nextThreshold}
+          />
         );
       })()}
 
@@ -2391,6 +2122,108 @@ export default function ResidentPanel({
               <Download className="h-4 w-4" />
               Download Official PNG Certificate
             </button>
+
+            {/* Resident Milestone Badge System */}
+            <div className="bg-white border-2 border-black p-4 rounded-2xl space-y-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-left">
+              <div className="flex items-center gap-1.5 border-b border-black/10 pb-2">
+                <Award className="h-5 w-5 text-amber-500 animate-pulse" />
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black uppercase text-black">🏆 Resident Milestone Badges</h3>
+                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">Earn prestigious badges for your direct carbon & waste diversion feats!</p>
+                </div>
+              </div>
+
+              {(() => {
+                const totalPoints = ledger.reduce((acc, curr) => acc + curr.pointsEarned, 0);
+                const badgesList = [
+                  { 
+                    id: 'b1', 
+                    name: 'Eco Rookie', 
+                    req: 1, 
+                    icon: '🌱', 
+                    desc: 'Logged first eco-action.',
+                    color: 'bg-emerald-100 border-emerald-500 text-emerald-900'
+                  },
+                  { 
+                    id: 'b2', 
+                    name: 'Sort Sentinel', 
+                    req: 400, 
+                    icon: '🛡️', 
+                    desc: 'Diligently sorted waste.',
+                    color: 'bg-sky-100 border-sky-500 text-sky-900'
+                  },
+                  { 
+                    id: 'b3', 
+                    name: 'Compost Hero', 
+                    req: 1000, 
+                    icon: '🍂', 
+                    desc: 'Recycled organic matter.',
+                    color: 'bg-amber-100 border-amber-500 text-amber-900'
+                  },
+                  { 
+                    id: 'b4', 
+                    name: 'Carbon Crusader', 
+                    req: 2000, 
+                    icon: '🚀', 
+                    desc: 'Offset substantial footprint.',
+                    color: 'bg-purple-100 border-purple-500 text-purple-900'
+                  },
+                  { 
+                    id: 'b5', 
+                    name: 'Circular Legend', 
+                    req: 3000, 
+                    icon: '👑', 
+                    desc: 'Elite society waste diversion leader.',
+                    color: 'bg-rose-100 border-rose-500 text-rose-900'
+                  }
+                ];
+
+                return (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {badgesList.map(b => {
+                        const isUnlocked = totalPoints >= b.req;
+                        return (
+                          <div 
+                            key={b.id}
+                            className={`flex flex-col items-center justify-center p-1.5 rounded-xl border-2 text-center relative group cursor-help select-none transition-all ${
+                              isUnlocked 
+                                ? `${b.color} border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)] scale-100` 
+                                : 'bg-zinc-100 border-zinc-300 text-zinc-400 opacity-50'
+                            }`}
+                          >
+                            <span className="text-xl">{b.icon}</span>
+                            <span className="text-[7px] font-extrabold tracking-tighter uppercase block truncate w-full mt-1">
+                              {b.name.split(' ')[0]}
+                            </span>
+                            
+                            {/* Hover tooltip */}
+                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-32 p-2 bg-black text-white text-[8px] rounded-lg font-bold opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-20 text-center leading-normal shadow-lg uppercase">
+                              <span className="text-yellow-400 block font-black">{b.name}</span>
+                              <span className="text-white block font-medium mt-0.5">{b.desc}</span>
+                              <span className="text-purple-300 block mt-1 font-extrabold">Req: {b.req} Pts</span>
+                              {isUnlocked ? (
+                                <span className="text-emerald-400 block font-black mt-0.5">✅ UNLOCKED</span>
+                              ) : (
+                                <span className="text-zinc-400 block font-black mt-0.5">🔒 {b.req - totalPoints} Pts to go</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Progress tracking indicator */}
+                    <div className="bg-zinc-50 border border-black/15 p-2 rounded-xl text-[9px] font-bold text-zinc-650 flex justify-between items-center">
+                      <span>Badges Unlocked:</span>
+                      <span className="font-extrabold text-black font-mono">
+                        {badgesList.filter(b => totalPoints >= b.req).length} / {badgesList.length} Unlocked
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* Eco-Reward Wallet & Claim Desk */}
             <div className="bg-[#FAF8F2] border-2 border-black p-4 rounded-2xl space-y-3.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-left">

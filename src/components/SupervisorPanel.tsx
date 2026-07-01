@@ -49,6 +49,7 @@ export default function SupervisorPanel({
   const [selectedComplaintId, setSelectedComplaintId] = useState<string | null>(null);
   const [resolveNotes, setResolveNotes] = useState('');
   const [isResolving, setIsResolving] = useState(false);
+  const [confirmingComplaintId, setConfirmingComplaintId] = useState<string | null>(null);
 
   // Portal creation states
   const [newPortalName, setNewPortalName] = useState('');
@@ -387,9 +388,14 @@ export default function SupervisorPanel({
   };
 
   // Submit resolution note
-  const handleResolveSubmit = async (id: string) => {
+  const handleResolveSubmit = async (id: string, bypassConfirm = false) => {
     if (!resolveNotes.trim()) {
       alert('Please compile action notes before closing.');
+      return;
+    }
+
+    if (!bypassConfirm) {
+      setConfirmingComplaintId(id);
       return;
     }
 
@@ -398,6 +404,7 @@ export default function SupervisorPanel({
       await onResolveComplaint(id, resolveNotes);
       setResolveNotes('');
       setSelectedComplaintId(null);
+      setConfirmingComplaintId(null);
       alert('Complaint ticket status closed successfully.');
     } catch (err: any) {
       alert('Error updating status.');
@@ -873,36 +880,74 @@ export default function SupervisorPanel({
                     <div className="pt-2 border-t-2 border-black mt-2">
                       {selectedComplaintId === comp.id ? (
                         <div className="space-y-3 mt-2">
-                          <textarea
-                            placeholder="Detail mitigation actions (e.g. dispatched lobby mopping squad, garbage cleared)..."
-                            rows={2}
-                            value={resolveNotes}
-                            onChange={(e) => setResolveNotes(e.target.value)}
-                            required
-                            className="w-full p-3 text-xs border-2 border-black rounded-xl bg-white text-black font-bold focus:outline-none focus:bg-zinc-50"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleResolveSubmit(comp.id)}
-                              disabled={isResolving}
-                              className="px-4 py-2 bg-[#10B981] hover:bg-[#059669] text-white font-black text-xs rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center gap-1 uppercase tracking-wider"
-                            >
-                              {isResolving && <Loader2 className="h-3 w-3 animate-spin" />}
-                              Submit & Close Ticket
-                            </button>
-                            <button
-                              onClick={() => setSelectedComplaintId(null)}
-                              className="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-black font-black text-xs rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer uppercase tracking-wider"
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                          {confirmingComplaintId === comp.id ? (
+                            <div className="bg-amber-50 border-3 border-amber-500 rounded-2xl p-4 space-y-2 animate-pulse shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                              <p className="text-xs font-black text-amber-950 uppercase tracking-tight flex items-center gap-1">
+                                <AlertTriangle className="h-4.5 w-4.5 text-amber-600 animate-bounce" />
+                                Are you sure you want to resolve this ticket?
+                              </p>
+                              <p className="text-[10px] text-zinc-700 font-bold leading-relaxed">
+                                This action will permanently mark the ticket as resolved and publish your caretaker notes:
+                                <span className="block mt-1 bg-white border-2 border-black px-2 py-1.5 rounded-lg italic font-semibold text-zinc-800">"{resolveNotes}"</span>
+                              </p>
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleResolveSubmit(comp.id, true)}
+                                  disabled={isResolving}
+                                  className="px-3 py-1.5 bg-[#10B981] hover:bg-[#059669] text-white font-black text-[10px] uppercase rounded-xl border-2 border-black cursor-pointer shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                  Yes, Resolve & Close
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmingComplaintId(null)}
+                                  className="px-3 py-1.5 bg-white hover:bg-zinc-100 text-black font-black text-[10px] uppercase rounded-xl border-2 border-black cursor-pointer shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                  Cancel & Edit
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <textarea
+                                placeholder="Detail mitigation actions (e.g. dispatched lobby mopping squad, garbage cleared)..."
+                                rows={2}
+                                value={resolveNotes}
+                                onChange={(e) => setResolveNotes(e.target.value)}
+                                required
+                                className="w-full p-3 text-xs border-2 border-black rounded-xl bg-white text-black font-bold focus:outline-none focus:bg-zinc-50"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleResolveSubmit(comp.id)}
+                                  disabled={isResolving}
+                                  className="px-4 py-2 bg-[#10B981] hover:bg-[#059669] text-white font-black text-xs rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer flex items-center gap-1 uppercase tracking-wider"
+                                >
+                                  {isResolving && <Loader2 className="h-3 w-3 animate-spin" />}
+                                  Submit & Close Ticket
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedComplaintId(null);
+                                    setConfirmingComplaintId(null);
+                                  }}
+                                  className="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-black font-black text-xs rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer uppercase tracking-wider"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <button
                           onClick={() => {
                             setSelectedComplaintId(comp.id);
                             setResolveNotes('');
+                            setConfirmingComplaintId(null);
                           }}
                           className="text-xs text-[#10B981] font-black hover:underline cursor-pointer flex items-center gap-1 uppercase tracking-wider mt-1"
                         >

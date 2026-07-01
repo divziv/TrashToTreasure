@@ -171,6 +171,70 @@ export default function LeaderboardMetrics({
     return data;
   };
 
+  // Generate 30 days of daily waste diverted and its 7-day moving average
+  const generateDivertedMovingAverageData = () => {
+    const data = [];
+    const baseDiverted = metrics ? Math.round((metrics.landfillDivertedKg * multiplier) / 30) : 15;
+    
+    // First, let's generate 30 days of raw daily diverted data
+    const rawDaily: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const dayFactor = 1 + Math.sin(i * 0.3) * 0.15 + (Math.cos(i * 0.7) * 0.1);
+      const noise = (Math.random() - 0.5) * 4;
+      rawDaily.push(Math.max(3, Math.round(baseDiverted * dayFactor + noise)));
+    }
+
+    // Now calculate 7-day moving average for each day
+    for (let i = 0; i < 30; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - 6); j <= i; j++) {
+        sum += rawDaily[j];
+        count++;
+      }
+      const movingAvg = Number((sum / count).toFixed(1));
+      const dailyVal = rawDaily[i];
+      const deviation = movingAvg > 0 ? Number((((dailyVal - movingAvg) / movingAvg) * 100).toFixed(1)) : 0;
+
+      data.push({
+        name: formattedDate,
+        'Daily Diverted (Kg)': dailyVal,
+        '7-Day Moving Avg (Kg)': movingAvg,
+        'Deviation (%)': deviation,
+      });
+    }
+    return data;
+  };
+
+  // Generate 7 days of daily waste reduction data
+  const generate7DayWasteReductionData = () => {
+    const data = [];
+    const baseReduction = metrics ? Math.round((metrics.landfillDivertedKg * multiplier) / 30) : 12;
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const formattedDate = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      // Sinusoidal daily trend with minor random noise
+      const factor = 1 + Math.sin((6 - i) * 0.9) * 0.2;
+      const noise = (Math.random() - 0.5) * 3;
+      const reductionVal = Math.max(2, Math.round(baseReduction * factor + noise));
+      // Organic compost contribution
+      const compostVal = Math.max(1, Math.round(reductionVal * 0.35 + (Math.random() - 0.5) * 1));
+      
+      data.push({
+        dateStr: formattedDate,
+        'Daily Reduction (Kg)': reductionVal,
+        'Organic Composted (Kg)': compostVal,
+        'Recyclables Recovered (Kg)': Math.max(1, reductionVal - compostVal),
+      });
+    }
+    return data;
+  };
+
   // Generate monthly waste reduction trends pulling from the impactMetrics state (metrics)
   const getMonthlyReductionData = () => {
     const baseCollected = metrics ? metrics.totalWasteCollectedKg * multiplier : 1845.5;
@@ -1030,22 +1094,22 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
                     </div>
                     <div className="w-full bg-white border-2 border-black h-3 rounded-full overflow-hidden flex shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                       <div 
-                        className="bg-[#FBBF24] h-full" 
+                        className="bg-[#FBBF24] h-full transition-all duration-700 ease-out" 
                         style={{ width: `${Math.min(100, (entity.wetWasteKg / (totalKg || 1)) * 100)}%` }} 
                         title={`Organic Waste: ${entity.wetWasteKg}kg`}
                       />
                       <div 
-                        className="bg-sky-500 h-full border-l border-black" 
+                        className="bg-sky-500 h-full border-l border-black transition-all duration-700 ease-out" 
                         style={{ width: `${Math.min(100, (entity.dryWasteKg / (totalKg || 1)) * 100)}%` }} 
                         title={`Recyclables: ${entity.dryWasteKg}kg`}
                       />
                       <div 
-                        className="bg-[#7C3AED] h-full border-l border-black" 
+                        className="bg-[#7C3AED] h-full border-l border-black transition-all duration-700 ease-out" 
                         style={{ width: `${Math.min(100, (entity.eWasteKg / (totalKg || 1)) * 100)}%` }} 
                         title={`E-waste: ${entity.eWasteKg}kg`}
                       />
                       <div 
-                        className="bg-[#F43F5E] h-full border-l border-black" 
+                        className="bg-[#F43F5E] h-full border-l border-black transition-all duration-700 ease-out" 
                         style={{ width: `${Math.min(100, (entity.hazardWasteKg / (totalKg || 1)) * 100)}%` }} 
                         title={`Hazardous: ${entity.hazardWasteKg}kg`}
                       />
@@ -1263,6 +1327,236 @@ Rank #${index + 1}: ${entity.portalName} [Type: ${entity.portalType.toUpperCase(
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 📈 7-Day Daily Waste Reduction Progress Time-Series Trend Line Chart */}
+      <div className="bg-white border-4 border-black p-4 sm:p-6 rounded-3xl shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-emerald-600 animate-pulse" />
+            <div>
+              <h3 className="text-md sm:text-lg font-black uppercase tracking-tight text-black">📈 Daily Waste Reduction Progress (7-Day Trend)</h3>
+              <p className="text-[10px] sm:text-xs font-bold text-zinc-550">
+                Time-series tracking of daily materials diverted from landfills, split by organics and recyclable recovery rates.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-black uppercase text-white bg-emerald-600 px-3 py-1.5 rounded-xl border-2 border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
+            <Sparkles className="h-4 w-4 text-yellow-300 animate-spin" />
+            <span>Recharts Live Tracker</span>
+          </div>
+        </div>
+
+        {/* Quick Summary Widgets for 7-Day Trend */}
+        {(() => {
+          const sevenDayData = generate7DayWasteReductionData();
+          const totalReduced = sevenDayData.reduce((acc, curr) => acc + curr['Daily Reduction (Kg)'], 0);
+          const avgReduced = Number((totalReduced / 7).toFixed(1));
+          const peakDay = [...sevenDayData].sort((a, b) => b['Daily Reduction (Kg)'] - a['Daily Reduction (Kg)'])[0];
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 bg-emerald-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="text-[9px] font-black text-emerald-950 uppercase block">7-Day Cumulative Savings</span>
+                <p className="text-xl font-black text-black">{totalReduced} Kg</p>
+                <span className="text-[9px] font-bold text-zinc-500 block">Diverted from municipal landfills</span>
+              </div>
+              <div className="p-3 bg-amber-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="text-[9px] font-black text-amber-950 uppercase block">Daily Reduction Mean</span>
+                <p className="text-xl font-black text-black">{avgReduced} Kg / day</p>
+                <span className="text-[9px] font-bold text-zinc-500 block">7-day rolling performance</span>
+              </div>
+              <div className="p-3 bg-indigo-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="text-[9px] font-black text-indigo-950 uppercase block">Weekly Peak Performance</span>
+                <p className="text-xl font-black text-black">{peakDay['Daily Reduction (Kg)']} Kg</p>
+                <span className="text-[9px] font-bold text-zinc-500 block">Logged on {peakDay.dateStr}</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* The Time-Series Trend Line Chart */}
+        <div className="h-[280px] w-full border-4 border-black rounded-2xl bg-[#FAF8F2]/30 p-2 sm:p-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={generate7DayWasteReductionData()}
+              margin={{ top: 15, right: 15, left: -20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+              <XAxis 
+                dataKey="dateStr" 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }} 
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <YAxis 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }}
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <RechartsTooltip 
+                contentStyle={{
+                  backgroundColor: '#FAF8F2',
+                  border: '3px solid #000',
+                  borderRadius: '12px',
+                  fontWeight: 'bold',
+                  fontSize: '11px',
+                  boxShadow: '2px 2px 0px 0px rgba(0,0,0,1)'
+                }}
+              />
+              <RechartsLegend 
+                wrapperStyle={{
+                  fontSize: '10px',
+                  fontWeight: 'black',
+                  textTransform: 'uppercase',
+                  paddingTop: '10px'
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Organic Composted (Kg)" 
+                stroke="#F59E0B" // amber
+                strokeWidth={3}
+                dot={{ stroke: '#000', strokeWidth: 1.5, r: 3.5 }}
+                activeDot={{ r: 6, stroke: '#000', strokeWidth: 2 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Recyclables Recovered (Kg)" 
+                stroke="#0EA5E9" // sky-blue
+                strokeWidth={3}
+                dot={{ stroke: '#000', strokeWidth: 1.5, r: 3.5 }}
+                activeDot={{ r: 6, stroke: '#000', strokeWidth: 2 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Daily Reduction (Kg)" 
+                stroke="#10B981" // emerald
+                strokeWidth={5} 
+                activeDot={{ r: 8, stroke: '#000', strokeWidth: 2 }}
+                dot={{ stroke: '#000', strokeWidth: 2, r: 4.5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 📊 7-Day Moving Average & Diverted Deviation Analysis */}
+      <div className="bg-white border-4 border-black p-4 sm:p-6 rounded-3xl shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-purple-600 animate-pulse" />
+            <div>
+              <h3 className="text-md sm:text-lg font-black uppercase tracking-tight text-black">♻️ Waste Diverted 7-Day Moving Average</h3>
+              <p className="text-[10px] sm:text-xs font-bold text-zinc-550">
+                Calculates a running 7-day average of successfully diverted materials, tracking real-time growth patterns and sudden daily anomalies.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs font-black uppercase text-white bg-purple-600 px-3 py-1.5 rounded-xl border-2 border-black shadow-[1.5px_1.5px_0px_0px_rgba(0,0,0,1)]">
+            <Sparkles className="h-4 w-4 text-yellow-300 animate-spin" />
+            <span>7D Moving Average Tracker</span>
+          </div>
+        </div>
+
+        {/* Quick Insights Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {(() => {
+            const data = generateDivertedMovingAverageData();
+            if (data.length === 0) return null;
+            const latest = data[data.length - 1];
+            const previous = data[data.length - 2] || latest;
+            const avgVal = latest['7-Day Moving Avg (Kg)'];
+            const dailyVal = latest['Daily Diverted (Kg)'];
+            const devVal = latest['Deviation (%)'];
+            const growthRate = previous['7-Day Moving Avg (Kg)'] > 0 
+              ? Number((((latest['7-Day Moving Avg (Kg)'] - previous['7-Day Moving Avg (Kg)']) / previous['7-Day Moving Avg (Kg)']) * 100).toFixed(1)) 
+              : 0;
+
+            return (
+              <>
+                <div className="p-3 bg-purple-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-[9px] font-black text-purple-900 uppercase block">Current Moving Avg</span>
+                  <p className="text-xl font-black text-black">{avgVal} Kg</p>
+                  <span className="text-[9px] font-bold text-zinc-500 block">Rolling 7-day mean</span>
+                </div>
+                <div className="p-3 bg-emerald-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-[9px] font-black text-emerald-900 uppercase block">Deviation Profile</span>
+                  <p className="text-xl font-black text-black">
+                    {devVal >= 0 ? `+${devVal}%` : `${devVal}%`}
+                  </p>
+                  <span className={`text-[9px] font-black uppercase flex items-center gap-0.5 ${devVal >= 0 ? 'text-emerald-700' : 'text-rose-650'}`}>
+                    {devVal >= 0 ? '🚀 Above Average (Surge)' : '⚠️ Below Average (Lag)'}
+                  </span>
+                </div>
+                <div className="p-3 bg-indigo-50 border-2 border-black rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-[9px] font-black text-indigo-900 uppercase block">7D Growth Trend</span>
+                  <p className="text-xl font-black text-black">
+                    {growthRate >= 0 ? `+${growthRate}%` : `${growthRate}%`}
+                  </p>
+                  <span className="text-[9px] font-bold text-zinc-500 block">Week-over-week momentum</span>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* The Moving Average & Daily Diverted Chart */}
+        <div className="h-[280px] w-full border-4 border-black rounded-2xl bg-[#FAF8F2]/30 p-2 sm:p-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={generateDivertedMovingAverageData()}
+              margin={{ top: 15, right: 10, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }} 
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <YAxis 
+                tick={{ fontSize: 9, fontWeight: 'bold', fill: '#000' }}
+                stroke="#000"
+                strokeWidth={2}
+              />
+              <RechartsTooltip 
+                contentStyle={{
+                  backgroundColor: '#FAF8F2',
+                  border: '3px solid #000',
+                  borderRadius: '12px',
+                  fontWeight: 'bold',
+                  fontSize: '11px',
+                  boxShadow: '2px 2px 0px 0px rgba(0,0,0,1)'
+                }}
+              />
+              <RechartsLegend 
+                wrapperStyle={{
+                  fontSize: '10px',
+                  fontWeight: 'black',
+                  textTransform: 'uppercase',
+                  paddingTop: '10px'
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Daily Diverted (Kg)" 
+                stroke="#34D399" // light emerald-400
+                strokeWidth={2} 
+                strokeDasharray="4 4"
+                dot={{ stroke: '#000', strokeWidth: 1, r: 3 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="7-Day Moving Avg (Kg)" 
+                stroke="#8B5CF6" // purple-500
+                strokeWidth={4} 
+                activeDot={{ r: 8, stroke: '#000', strokeWidth: 2 }}
+                dot={{ stroke: '#000', strokeWidth: 2, r: 4 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>

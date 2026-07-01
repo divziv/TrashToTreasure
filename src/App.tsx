@@ -1039,6 +1039,7 @@ export default function App() {
               onSubmitComplaint={handleAddComplaint}
               onSubmitDonation={handleAddDonation}
               loading={loading}
+              complaints={complaints}
             />
           )}
 
